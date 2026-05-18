@@ -369,7 +369,7 @@ run_DIpreprocess <- function(
     all_na <- colSums(is.na(df), na.rm = TRUE) == nrow(df)
     if (any(all_na)) {
       df <- df[, !all_na, drop = FALSE]
-      msg(sprintf("  Removed %d all-NA feature(s).", sum(all_na)))
+      msg(sprintf("  Removed %d all-NA feature(s). %d remaining.", sum(all_na), ncol(df)))
     }
 
     out$data_raw   <- df
@@ -398,9 +398,9 @@ run_DIpreprocess <- function(
     out$data_missing_filtered <- df
     out$dimensions <- .record_dim(out$dimensions, "After missing filter", df)
 
-    msg(sprintf("  Removed %d feature(s) (%.1f%%).",
+    msg(sprintf("  Removed %d feature(s) (%.1f%%). %d remaining.",
                 filt_miss$n_features_removed,
-                filt_miss$n_features_removed / filt_miss$n_features_before * 100))
+                filt_miss$n_features_removed / filt_miss$n_features_before * 100, ncol(df)))
 
     # =========================================================================
     # 4. MISSING-VALUE IMPUTATION
@@ -465,8 +465,8 @@ run_DIpreprocess <- function(
         corr_df <- corr_result$data
         keep    <- setdiff(colnames(corr_df), uncorrected_features)
         df      <- corr_df[, keep, drop = FALSE]
-        msg(sprintf("  Removed %d uncorrected feature(s).",
-                    length(uncorrected_features)))
+        msg(sprintf("  Removed %d uncorrected feature(s). %d remaining.",
+                    length(uncorrected_features), ncol(df)))
       } else {
         df <- corr_result$data
         if (length(uncorrected_features) > 0L)
@@ -601,8 +601,19 @@ run_DIpreprocess <- function(
       )
       data_rsd <- rsd_res$data
 
-      msg(sprintf("  [%s] RSD: removed %d feature(s).",
-                  branch_name, rsd_res$n_features_removed))
+      # Ensure data_rsd is a data frame even if no features pass
+      if (is.logical(data_rsd) || is.null(data_rsd) || is.null(ncol(data_rsd))) {
+        data_rsd <- data[, 0, drop = FALSE]
+      }
+
+      msg(sprintf("  [%s] RSD: removed %d feature(s). %d remaining.",
+                  branch_name, rsd_res$n_features_removed, ncol(data_rsd)))
+
+      # If 0 features remain, skip variance filtering but still provide output
+      if (ncol(data_rsd) == 0L) {
+        msg(sprintf("  [%s] Variance: skipped (0 features remaining).", branch_name))
+        return(list(rsd = data_rsd, final = data_rsd))
+      }
 
       # Variance filter
       var_res  <- run_filtervariance(
@@ -612,8 +623,13 @@ run_DIpreprocess <- function(
       )
       data_var <- var_res$data
 
-      msg(sprintf("  [%s] Variance: removed %d feature(s).",
-                  branch_name, var_res$n_features_removed))
+      # Ensure data_var is a data frame
+      if (is.logical(data_var) || is.null(data_var) || is.null(ncol(data_var))) {
+        data_var <- data_rsd[, 0, drop = FALSE]
+      }
+
+      msg(sprintf("  [%s] Variance: removed %d feature(s). %d remaining.",
+                  branch_name, var_res$n_features_removed, ncol(data_var)))
 
       list(rsd = data_rsd, final = data_var)
     }
@@ -623,15 +639,7 @@ run_DIpreprocess <- function(
       filt_nonpls <- .filter_branch(df_nonpls, "NONPLS")
       filt_pls    <- .filter_branch(df_pls,    "PLS")
 
-      features_final <- intersect(
-        colnames(filt_nonpls$final),
-        colnames(filt_pls$final)
-      )
-
-      if (length(features_final) == 0L)
-        stop("No features passed quality filtering in both branches. ",
-             "Consider relaxing 'rsd_threshold' or 'variance_percentile'.")
-
+      # Record dimensions for all sub-steps before calculating final set or stopping
       out$dimensions <- .record_dim(
         out$dimensions, "After NONPLS RSD filter", filt_nonpls$rsd
       )
@@ -645,10 +653,18 @@ run_DIpreprocess <- function(
         out$dimensions, "After PLS variance filter", filt_pls$final
       )
 
+      features_final <- intersect(
+        colnames(filt_nonpls$final),
+        colnames(filt_pls$final)
+      )
+
+      if (length(features_final) == 0L)
+        stop("No features passed quality filtering in both branches. ",
+             "Consider relaxing 'rsd_threshold' or 'variance_percentile'.")
+
     } else if (scale_filter_ref == "NONPLS") {
 
       filt_nonpls    <- .filter_branch(df_nonpls, "NONPLS")
-      features_final <- colnames(filt_nonpls$final)
 
       out$dimensions <- .record_dim(
         out$dimensions, "After NONPLS RSD filter", filt_nonpls$rsd
@@ -657,10 +673,15 @@ run_DIpreprocess <- function(
         out$dimensions, "After NONPLS variance filter (reference)", filt_nonpls$final
       )
 
+      features_final <- colnames(filt_nonpls$final)
+
+      if (length(features_final) == 0L)
+        stop("No features passed quality filtering (NONPLS branch). ",
+             "Consider relaxing 'rsd_threshold' or 'variance_percentile'.")
+
     } else {  # "PLS"
 
       filt_pls       <- .filter_branch(df_pls, "PLS")
-      features_final <- colnames(filt_pls$final)
 
       out$dimensions <- .record_dim(
         out$dimensions, "After PLS RSD filter", filt_pls$rsd
@@ -668,6 +689,12 @@ run_DIpreprocess <- function(
       out$dimensions <- .record_dim(
         out$dimensions, "After PLS variance filter (reference)", filt_pls$final
       )
+
+      features_final <- colnames(filt_pls$final)
+
+      if (length(features_final) == 0L)
+        stop("No features passed quality filtering (PLS branch). ",
+             "Consider relaxing 'rsd_threshold' or 'variance_percentile'.")
     }
 
     msg(sprintf("  Final feature set: %d feature(s).", length(features_final)))
