@@ -170,10 +170,10 @@ plot_dist_beforeafter <- function(
 
   # --- Integration with run_DIpreprocess ---
   if (inherits(x, "run_DIpreprocess")) {
-    if (missing(metadata) || is.null(metadata)) {
-      # Must use unmerged metadata because data_imputed is unmerged
-      metadata <- x$metadata
-    }
+    # if (missing(metadata) || is.null(metadata)) {
+    #   # Must use unmerged metadata because data_imputed is unmerged
+    #   metadata <- x$metadata
+    # }
     
     # Extract states
     data_before <- x$data_imputed
