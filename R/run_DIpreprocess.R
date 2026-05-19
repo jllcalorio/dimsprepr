@@ -101,6 +101,13 @@
 #'   \item Common-feature harmonisation
 #' }
 #'
+#' @note
+#' \strong{Zero Handling:} The pipeline automatically converts all \code{0} values in
+#' \code{x} to \code{NA} prior to analysis. This represents a strong, domain-specific
+#' assumption (common in mass spectrometry metabolomics) that zeros signify structural
+#' missingness (e.g., values below the limit of detection) rather than a true biological 
+#' absence.
+#' 
 #' @author John Lennon L. Calorio
 #'
 #' @seealso
@@ -288,6 +295,50 @@ run_DIpreprocess <- function(
       stop("'variance_percentile' must be a numeric value in [0, 100].")
     if (!group_col %in% colnames(metadata))
       stop(sprintf("group_col '%s' not found in metadata.", group_col))
+    
+    # --- Metadata Validation ---
+    
+    # 1. Check if specific columns are numeric
+    for (col_name in c(batch_col, injection_col, norm_factor_col)) {
+      if (col_name %in% colnames(metadata)) {
+        if (!is.numeric(metadata[[col_name]])) {
+          stop(sprintf("Metadata column '%s' must be numeric. Please ensure it does not contain characters or factors.", col_name))
+        }
+      }
+    }
+
+    # 2. Check for duplicate injection sequences
+    if (injection_col %in% colnames(metadata)) {
+      if (any(duplicated(metadata[[injection_col]], incomparables = NA))) {
+        stop(sprintf("Duplicate values found in the '%s' column. Injection sequence orders must be unique.", injection_col))
+      }
+    }
+
+    # 3. Check for duplicate sample IDs
+    if (sample_id_col %in% colnames(metadata)) {
+      if (any(duplicated(metadata[[sample_id_col]]))) {
+        dups <- metadata[[sample_id_col]][duplicated(metadata[[sample_id_col]])]
+        stop(sprintf("Duplicate sample IDs found in the '%s' column. Each sample must have a unique ID. Duplicates: %s",
+                     sample_id_col, paste(head(unique(dups), 5), collapse = ", ")))
+      }
+    }
+
+    # 4. Check for invalid NA values in normalization factors for biological samples
+    if (norm_factor_col %in% colnames(metadata) && group_col %in% colnames(metadata)) {
+      is_non_qc <- !metadata[[group_col]] %in% qc_types
+      is_na_norm <- is.na(metadata[[norm_factor_col]])
+      
+      if (any(is_non_qc & is_na_norm)) {
+        invalid_samples <- rownames(metadata)[is_non_qc & is_na_norm]
+        if (is.null(invalid_samples) || length(invalid_samples) == 0L) {
+          invalid_samples <- which(is_non_qc & is_na_norm)
+        }
+        stop(sprintf(
+          "Missing values (NA) detected in '%s' for non-QC samples. While QCs can have NAs for normalization, biological samples must have valid normalization factors. Please check samples: %s",
+          norm_factor_col, paste(head(invalid_samples, 5), collapse = ", ")
+        ))
+      }
+    }
 
     was_matrix <- is.matrix(x)
     df <- as.data.frame(as.matrix(x))
@@ -300,8 +351,16 @@ run_DIpreprocess <- function(
       rownames(metadata) <- rownames(x)
     }
 
-    # Ensure all feature columns are numeric
-    df[] <- lapply(df, function(col) suppressWarnings(as.numeric(as.character(col))))
+    # Ensure all feature columns in 'x' are purely numeric upfront
+    is_numeric_col <- vapply(df, function(col) is.numeric(col) || is.integer(col), logical(1))
+    
+    if (!all(is_numeric_col)) {
+      bad_cols <- names(df)[!is_numeric_col]
+      stop(sprintf(
+        "Input matrix/data.frame 'x' must contain ONLY numeric feature columns. Non-numeric columns detected: %s. Please separate metadata from feature data before running the pipeline.",
+        paste(head(bad_cols, 5), collapse = ", ")
+      ))
+    }
 
     out$dimensions <- .record_dim(out$dimensions, "Original", df)
 
@@ -533,9 +592,7 @@ run_DIpreprocess <- function(
       )
       df_norm <- norm_result$data
     }
-
-    out$data_normalized_org <- df_norm # REMOVE AFTER CHECKING
-
+    
     # =========================================================================
     # 7. TRANSFORMATION
     # =========================================================================
@@ -558,8 +615,6 @@ run_DIpreprocess <- function(
       df_trans <- trans_result$data
     }
 
-    out$data_transformed_org <- df_trans # REMOVE AFTER CHECKING
-
     # =========================================================================
     # 8. SCALING (two parallel branches)
     # =========================================================================
@@ -574,9 +629,6 @@ run_DIpreprocess <- function(
 
     df_nonpls <- .scale_branch(df_trans, scale_nonpls)
     df_pls    <- .scale_branch(df_trans, scale_pls)
-
-    out$data_nonpls_scaled_org <- df_nonpls # REMOVE AFTER CHECKING
-    out$data_pls_scaled_org    <- df_pls    # REMOVE AFTER CHECKING
 
     # =========================================================================
     # 9. QUALITY FILTERING PER BRANCH

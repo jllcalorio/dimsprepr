@@ -177,6 +177,13 @@ execute in a fixed, reproducible order regardless of argument arrangement.
 \item Common-feature harmonisation
 }
 }
+\note{
+\strong{Zero Handling:} The pipeline automatically converts all \code{0} values in
+\code{x} to \code{NA} prior to analysis. This represents a strong, domain-specific
+assumption (common in mass spectrometry metabolomics) that zeros signify structural
+missingness (e.g., values below the limit of detection) rather than a true biological
+absence.
+}
 \examples{
 \dontrun{
 set.seed(42)
