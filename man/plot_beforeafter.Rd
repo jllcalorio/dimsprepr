@@ -8,7 +8,7 @@ plot_beforeafter(
   x,
   y,
   metadata,
-  plot_what,
+  plot_what = NULL,
   col_injection = "InjectionSequence",
   col_batch = "Batch",
   col_group = "Group",
@@ -43,9 +43,10 @@ and column names as \code{x}.}
 by both \code{x} and \code{y}. Must have the same number of rows as
 \code{x} and \code{y}.}
 
-\item{plot_what}{Character vector. Column names in \code{x} and \code{y}
-to be plotted. All values must be present in both data frames. This
-argument is required.}
+\item{plot_what}{Character vector or \code{NULL}. Column names from \code{x}
+to be plotted. If \code{NULL} (default), the function will randomly select
+up to 6 feature names from \code{x}. If \code{x} has fewer than 6 features,
+all available features will be plotted. This argument is required.}
 
 \item{col_injection}{Character. Name of the column in \code{metadata}
 containing the injection sequence (numeric order of runs).

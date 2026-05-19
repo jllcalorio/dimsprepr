@@ -18,9 +18,10 @@
 #' @param metadata A \code{data.frame} containing sample-level metadata shared
 #'   by both \code{x} and \code{y}. Must have the same number of rows as
 #'   \code{x} and \code{y}.
-#' @param plot_what Character vector. Column names in \code{x} and \code{y}
-#'   to be plotted. All values must be present in both data frames. This
-#'   argument is required.
+#' @param plot_what Character vector or \code{NULL}. Column names from \code{x}
+#'   to be plotted. If \code{NULL} (default), the function will randomly select
+#'   up to 6 feature names from \code{x}. If \code{x} has fewer than 6 features,
+#'   all available features will be plotted. This argument is required.
 #' @param col_injection Character. Name of the column in \code{metadata}
 #'   containing the injection sequence (numeric order of runs).
 #'   Default is \code{"InjectionSequence"}.
@@ -142,7 +143,7 @@ plot_beforeafter <- function(
     x,
     y,
     metadata,
-    plot_what,
+    plot_what        = NULL,
     col_injection    = "InjectionSequence",
     col_batch        = "Batch",
     col_group        = "Group",
@@ -253,18 +254,31 @@ plot_beforeafter <- function(
   }
 
   # -------------------------------------------------------------------------
-  # Input validation: plot_what
+  # Resolve plot_what (random selection if NULL)
   # -------------------------------------------------------------------------
-  if (missing(plot_what) || is.null(plot_what)) {
-    stop(
-      "'plot_what' is required. Provide a character vector of column names ",
-      "from 'x' and 'y' to plot."
-    )
-  }
-  if (!is.character(plot_what) || length(plot_what) < 1L) {
-    stop("'plot_what' must be a non-empty character vector.")
+  if (is.null(plot_what)) {
+    if (length(x_cols) == 0L) {
+      stop("No features available in 'x' to plot.")
+    }
+    if (!is.null(seed)) {
+      set.seed(seed)
+    }
+    if (length(x_cols) <= 6) {
+      plot_what <- x_cols
+    } else {
+      plot_what <- sample(x_cols, 6)
+    }
+    message(sprintf(
+      "Automatically selected %d random features to plot: %s",
+      length(plot_what), paste(plot_what, collapse = ", ")
+    ))
+  } else if (!is.character(plot_what) || length(plot_what) < 1L) {
+    stop("'plot_what' must be a non-empty character vector of feature names.")
   }
 
+  # -------------------------------------------------------------------------
+  # Input validation: plot_what (after resolution)
+  # -------------------------------------------------------------------------
   missing_features <- setdiff(plot_what, x_cols)
   if (length(missing_features) > 0L) {
     stop(
