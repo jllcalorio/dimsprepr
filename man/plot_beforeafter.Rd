@@ -12,7 +12,7 @@ plot_beforeafter(
   col_injection = "InjectionSequence",
   col_batch = "Batch",
   col_group = "Group",
-  col_qc_label = "QC",
+  col_qc_label = c("QC", "SQC", "EQC"),
   x_label = "Before",
   y_label = "After",
   log_transform = TRUE,
@@ -33,7 +33,8 @@ plot_beforeafter(
 \arguments{
 \item{x}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing
 the data \emph{before} the transformation. Rows are samples; columns are
-features. Column names may contain special characters.}
+features. Column names may contain special characters. Input can be
+a \code{link{run_DIpreprocess}} class.}
 
 \item{y}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing
 the data \emph{after} the transformation. Must have the same dimensions
@@ -50,19 +51,23 @@ all available features will be plotted. This argument is required.}
 
 \item{col_injection}{Character. Name of the column in \code{metadata}
 containing the injection sequence (numeric order of runs).
-Default is \code{"InjectionSequence"}.}
+Default is \code{"InjectionSequence"}. If \code{run_DIpreprocess} class,
+value is automatically taken from \verb{$parameters$injection_col}.}
 
 \item{col_batch}{Character. Name of the column in \code{metadata}
-containing batch identifiers. Default is \code{"Batch"}.}
+containing batch identifiers. Default is \code{"Batch"}. If \code{run_DIpreprocess} class,
+value is automatically taken from \verb{$parameters$batch_col}.}
 
 \item{col_group}{Character. Name of the column in \code{metadata}
 containing sample group labels (e.g., \code{"QC"}, \code{"Sample"}).
-Default is \code{"Group"}.}
+Default is \code{"Group"}. If \code{run_DIpreprocess} class,
+value is automatically taken from \verb{$parameters$group_col}.}
 
-\item{col_qc_label}{Character. The value in the \code{col_group} column
+\item{col_qc_label}{Character vector. The value(s) in the \code{col_group} column
 that identifies the reference group for LOESS trend fitting (typically
-QC samples). If \code{NULL}, no LOESS line is drawn. Default is
-\code{"QC"}.}
+QC samples). Can be a vector like \code{c("SQC", "EQC")}. If \code{NULL},
+no LOESS line is drawn. Default is \code{c("QC", "SQC", "EQC")}. If \code{run_DIpreprocess} class,
+value is automatically taken from \verb{$parameters$qc_types}.}
 
 \item{x_label}{Character. Label for the before-correction facet panel.
 Default is \code{"Before"}.}

@@ -11,7 +11,8 @@
 #'
 #' @param x A \code{data.frame}, \code{tibble}, or \code{matrix} representing
 #'   the data \emph{before} the transformation. Rows are samples; columns are
-#'   features. Column names may contain special characters.
+#'   features. Column names may contain special characters. Input can be
+#'   a \code{link{run_DIpreprocess}} class.
 #' @param y A \code{data.frame}, \code{tibble}, or \code{matrix} representing
 #'   the data \emph{after} the transformation. Must have the same dimensions
 #'   and column names as \code{x}.
@@ -24,16 +25,20 @@
 #'   all available features will be plotted. This argument is required.
 #' @param col_injection Character. Name of the column in \code{metadata}
 #'   containing the injection sequence (numeric order of runs).
-#'   Default is \code{"InjectionSequence"}.
+#'   Default is \code{"InjectionSequence"}. If \code{run_DIpreprocess} class,
+#'   value is automatically taken from `$parameters$injection_col`.
 #' @param col_batch Character. Name of the column in \code{metadata}
-#'   containing batch identifiers. Default is \code{"Batch"}.
+#'   containing batch identifiers. Default is \code{"Batch"}. If \code{run_DIpreprocess} class,
+#'   value is automatically taken from `$parameters$batch_col`.
 #' @param col_group Character. Name of the column in \code{metadata}
 #'   containing sample group labels (e.g., \code{"QC"}, \code{"Sample"}).
-#'   Default is \code{"Group"}.
-#' @param col_qc_label Character. The value in the \code{col_group} column
+#'   Default is \code{"Group"}. If \code{run_DIpreprocess} class,
+#'   value is automatically taken from `$parameters$group_col`.
+#' @param col_qc_label Character vector. The value(s) in the \code{col_group} column
 #'   that identifies the reference group for LOESS trend fitting (typically
-#'   QC samples). If \code{NULL}, no LOESS line is drawn. Default is
-#'   \code{"QC"}.
+#'   QC samples). Can be a vector like \code{c("SQC", "EQC")}. If \code{NULL},
+#'   no LOESS line is drawn. Default is \code{c("QC", "SQC", "EQC")}. If \code{run_DIpreprocess} class,
+#'   value is automatically taken from `$parameters$qc_types`.
 #' @param x_label Character. Label for the before-correction facet panel.
 #'   Default is \code{"Before"}.
 #' @param y_label Character. Label for the after-correction facet panel.
@@ -132,7 +137,7 @@
 #' @author John Lennon L. Calorio
 #'
 #' @importFrom ggplot2 ggplot aes geom_point geom_smooth facet_wrap
-#'   scale_color_manual labs theme_bw theme_minimal theme_classic theme_light
+#'   scale_color_manual scale_shape_manual labs theme_bw theme_minimal theme_classic theme_light
 #'   theme_dark theme element_text element_blank element_line element_rect
 #'   labeller
 #' @importFrom gridExtra arrangeGrob
@@ -147,7 +152,7 @@ plot_beforeafter <- function(
     col_injection    = "InjectionSequence",
     col_batch        = "Batch",
     col_group        = "Group",
-    col_qc_label     = "QC",
+    col_qc_label     = c("QC", "SQC", "EQC"),
     x_label          = "Before",
     y_label          = "After",
     log_transform    = TRUE,
@@ -179,6 +184,7 @@ plot_beforeafter <- function(
 
   # --- Integration with run_DIpreprocess ---
   if (inherits(x, "run_DIpreprocess")) {
+    obj_ref <- x
     if (missing(metadata) || is.null(metadata)) {
       # Must use unmerged metadata because data_imputed is unmerged
       metadata <- x$metadata
@@ -197,6 +203,19 @@ plot_beforeafter <- function(
     # Overwrite x and y
     x <- data_before[, common_features, drop = FALSE]
     y <- data_after[, common_features, drop = FALSE]
+
+    # Use standardized column names from run_DIpreprocess metadata
+    col_injection <- "InjectionSequence"
+    col_batch     <- "Batch"
+    col_group     <- "Group"
+
+    # Use qc_types from the parameters for LOESS reference
+    if (!is.null(obj_ref$parameters$qc_types)) {
+      # Evaluate because parameters might be stored as calls/symbols
+      col_qc_label <- eval(obj_ref$parameters$qc_types, envir = parent.frame())
+    } else {
+      col_qc_label <- c("QC", "SQC", "EQC") # Fallback to defaults
+    }
   }
 
   # -------------------------------------------------------------------------
@@ -343,12 +362,12 @@ plot_beforeafter <- function(
   # Input validation: col_qc_label
   # -------------------------------------------------------------------------
   if (!is.null(col_qc_label)) {
-    if (!is.character(col_qc_label) || length(col_qc_label) != 1L) {
-      stop("'col_qc_label' must be a single character string or NULL.")
+    if (!is.character(col_qc_label) || length(col_qc_label) < 1L) {
+      stop("'col_qc_label' must be a character vector or NULL.")
     }
-    if (!col_qc_label %in% metadata[[col_group]]) {
+    if (!any(col_qc_label %in% metadata[[col_group]])) {
       warning(
-        "'col_qc_label' value \"", col_qc_label, "\" was not found in ",
+        "None of the 'col_qc_label' values (", paste(col_qc_label, collapse = ", "), ") were found in ",
         "metadata$", col_group, ". No LOESS trend line will be drawn."
       )
       col_qc_label <- NULL
@@ -449,11 +468,28 @@ plot_beforeafter <- function(
   }
 
   # -------------------------------------------------------------------------
+  # Derive batch shape palette (standard R shapes, up to 20 unique)
+  # -------------------------------------------------------------------------
+  batch_vec    <- as.factor(metadata[[col_batch]])
+  batch_levels <- levels(batch_vec)
+
+  # Prioritize solid shapes for visibility, then symbols
+  shape_pool <- c(16, 17, 15, 18, 3, 4, 8, 1, 2, 0, 5, 6, 7, 10, 11, 12, 13, 14, 9, 20)
+  n_batches_total <- length(batch_levels)
+
+  if (n_batches_total > length(shape_pool)) {
+    batch_shapes <- rep(shape_pool, length.out = n_batches_total)
+  } else {
+    batch_shapes <- shape_pool[seq_len(n_batches_total)]
+  }
+  batch_shapes <- stats::setNames(batch_shapes, batch_levels)
+
+  # -------------------------------------------------------------------------
   # Build per-feature panels
   # -------------------------------------------------------------------------
   n_rows        <- nrow(x)
   injection_seq <- metadata[[col_injection]]
-  batch_vec     <- as.factor(metadata[[col_batch]])
+  # batch_vec moved above for palette derivation
   group_vec     <- as.character(metadata[[col_group]])
   y_axis_label  <- if (log_transform) "log10(Value)" else "Value"
 
@@ -483,7 +519,7 @@ plot_beforeafter <- function(
     # LOESS eligibility check
     draw_loess <- !is.null(col_qc_label)
     if (draw_loess) {
-      n_qc_obs <- sum(group_vec == col_qc_label)
+      n_qc_obs <- sum(group_vec %in% col_qc_label)
       if (n_qc_obs < 3L) {
         warning(
           "Feature '", feat, "': fewer than 3 observations in the '",
@@ -505,7 +541,7 @@ plot_beforeafter <- function(
       )
 
     if (draw_loess) {
-      qc_data <- plot_data[plot_data$group == col_qc_label, , drop = FALSE]
+      qc_data <- plot_data[plot_data$group %in% col_qc_label, , drop = FALSE]
       p <- p + ggplot2::geom_smooth(
         data      = qc_data,
         formula   = y ~ x,
@@ -527,6 +563,11 @@ plot_beforeafter <- function(
       ggplot2::scale_color_manual(
         values = group_colors,
         limits = group_levels,
+        drop   = FALSE
+      ) +
+      ggplot2::scale_shape_manual(
+        values = batch_shapes,
+        limits = batch_levels,
         drop   = FALSE
       ) +
       ggplot2::labs(
