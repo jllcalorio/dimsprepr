@@ -606,7 +606,7 @@ run_DIpreprocess <- function(
       trans_result <- run_transform(
         x         = df_norm,
         method    = transform_method,
-        metadata  = NULL,
+        metadata  = metadata,
         groups    = group_col,
         qc_types  = qc_types,
         num_cores = vsn_cores,
