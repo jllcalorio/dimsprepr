@@ -596,18 +596,47 @@ plot_beforeafter <- function(
     plot_cols <- if (n_plots == 1L) 1L else if (n_plots <= 6L) 2L else 3L
   }
 
-  combined_plot <- gridExtra::arrangeGrob(
-    grobs = plot_list,
-    ncol  = plot_cols,
-    top   = grid::textGrob(
-      main_title,
-      gp = grid::gpar(
-        fontsize = r_subtitle_size,
-        fontface = "bold",
-        fontfamily = font_family
-      )
+  # Extract legend from the first plot and remove from all subplots to reduce clutter
+  shared_legend <- NULL
+  if (n_plots > 0) {
+    tmp_grob <- ggplot2::ggplotGrob(plot_list[[1]])
+    leg_idx  <- which(sapply(tmp_grob$grobs, function(x) x$name) == "guide-box")
+    if (length(leg_idx) > 0) {
+      shared_legend <- tmp_grob$grobs[[leg_idx]]
+    }
+
+    # Remove legends from all individual panels to maximize plot area
+    plot_list <- lapply(plot_list, function(p) {
+      p + ggplot2::theme(legend.position = "none")
+    })
+  }
+
+  # Arrange subplots into a grid
+  plots_grid <- gridExtra::arrangeGrob(grobs = plot_list, ncol = plot_cols)
+
+  # Final arrangement with shared legend on the right
+  main_title_grob <- grid::textGrob(
+    main_title,
+    gp = grid::gpar(
+      fontsize   = r_subtitle_size,
+      fontface   = "bold",
+      fontfamily = font_family
     )
   )
+
+  if (!is.null(shared_legend)) {
+    combined_plot <- gridExtra::arrangeGrob(
+      plots_grid, shared_legend,
+      ncol   = 2,
+      widths = c(10, 1.5), # Maximize plot space, narrow legend column
+      top    = main_title_grob
+    )
+  } else {
+    combined_plot <- gridExtra::arrangeGrob(
+      plots_grid,
+      top = main_title_grob
+    )
+  }
 
   grid::grid.newpage()
   grid::grid.draw(combined_plot)
