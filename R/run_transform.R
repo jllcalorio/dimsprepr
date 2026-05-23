@@ -108,6 +108,8 @@
 #' @importFrom pmp glog_transformation
 #' @importFrom BiocParallel register SnowParam SerialParam
 #' @importFrom parallelly availableCores
+#' 
+#' @seealso \code{\link{run_DIpreprocess}}
 #'
 #' @export
 #'

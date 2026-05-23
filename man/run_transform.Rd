@@ -144,6 +144,9 @@ Improved classification accuracy in 1- and 2-dimensional NMR metabolomics data
 using the variance stabilising generalised logarithm transformation.
 \emph{BMC Bioinformatics}, 8, 234. \doi{10.1186/1471-2105-8-234}
 }
+\seealso{
+\code{\link{run_DIpreprocess}}
+}
 \author{
 John Lennon L. Calorio
 }

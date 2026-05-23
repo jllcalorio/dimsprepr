@@ -132,6 +132,8 @@
 #'
 #' @importFrom mice mice complete
 #' @importFrom imputeLCMD impute.QRILC
+#' 
+#' @seealso \code{\link{run_DIpreprocess}}
 #'
 #' @export
 #'

@@ -152,6 +152,9 @@ Jankevics A, Lloyd GR, Weber RJM (2025). pmp: Peak Matrix Processing and signal
 batch correction for metabolomics datasets. \doi{10.18129/B9.bioc.pmp},
 R package version 1.20.0, \url{https://bioconductor.org/packages/pmp}.
 }
+\seealso{
+\code{\link{run_DIpreprocess}}
+}
 \author{
 John Lennon L. Calorio
 }

@@ -98,6 +98,8 @@
 #' @importFrom sva ComBat
 #' @importFrom matrixStats colMaxs
 #'
+#' @seealso \code{\link{run_DIpreprocess}}
+#' 
 #' @export
 #'
 #' @examples

@@ -63,6 +63,8 @@
 #' Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
 #'
 #' @importFrom matrixStats colVars
+#' 
+#' @seealso \code{\link{run_DIpreprocess}}
 #'
 #' @export
 #'

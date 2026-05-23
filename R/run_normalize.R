@@ -99,6 +99,8 @@
 #' R package version 1.20.0, \url{https://bioconductor.org/packages/pmp}.
 #'
 #' @importFrom matrixStats rowMedians colMedians rowSums2 colSums2
+#' 
+#' @seealso \code{\link{run_DIpreprocess}}
 #'
 #' @export
 #'

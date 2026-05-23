@@ -143,6 +143,9 @@ Wei, R., Wang, J., Su, M., Jia, E., Chen, S., Chen, T., & Ni, Y. (2018).
 Missing Value Imputation Approach for Mass Spectrometry-based Metabolomics Data.
 Scientific Reports, 8(1), 663. \doi{10.1038/s41598-017-19120-0}
 }
+\seealso{
+\code{\link{run_DIpreprocess}}
+}
 \author{
 John Lennon L. Calorio
 }

@@ -180,6 +180,8 @@ Quantitative Proteomics Data Sets to Compare Imputation Strategies.
 }
 \seealso{
 \code{\link[mice]{mice}}, \code{\link[imputeLCMD]{impute.QRILC}}
+
+\code{\link{run_DIpreprocess}}
 }
 \author{
 John Lennon L. Calorio

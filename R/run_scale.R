@@ -73,6 +73,8 @@
 #' Wadsworth & Brooks/Cole. \doi{10.1201/9781351074988}
 #'
 #' @importFrom matrixStats colSds
+#' 
+#' @seealso \code{\link{run_DIpreprocess}}
 #'
 #' @export
 #'

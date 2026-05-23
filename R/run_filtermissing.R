@@ -93,6 +93,8 @@
 #' Scientific Reports, 8(1), 663. \doi{10.1038/s41598-017-19120-0}
 #'
 #' @importFrom matrixStats colMeans2
+#' 
+#' @seealso \code{\link{run_DIpreprocess}}
 #'
 #' @export
 #'

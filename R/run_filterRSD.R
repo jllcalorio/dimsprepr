@@ -84,6 +84,8 @@
 #'
 #' @importFrom pmp filter_peaks_by_rsd
 #' @importFrom matrixStats colSds colMeans2
+#' 
+#' @seealso \code{\link{run_DIpreprocess}}
 #'
 #' @export
 #'

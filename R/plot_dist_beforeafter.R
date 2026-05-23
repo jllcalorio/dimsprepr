@@ -131,6 +131,8 @@
 #'   element_text element_blank element_line element_rect
 #' @importFrom gridExtra arrangeGrob
 #' @importFrom grid grid.newpage grid.draw textGrob gpar
+#' 
+#' @seealso \code{\link{run_DIpreprocess}}
 #'
 #' @export
 plot_dist_beforeafter <- function(

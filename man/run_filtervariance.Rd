@@ -94,6 +94,9 @@ Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control, Batch Co
 Exploration & Data Cleaning (Version 2.1) Zendono. \doi{10.5281/zenodo.16824822}.
 Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
 }
+\seealso{
+\code{\link{run_DIpreprocess}}
+}
 \author{
 John Lennon L. Calorio
 }

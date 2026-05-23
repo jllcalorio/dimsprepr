@@ -103,6 +103,9 @@ metabolomics data. BMC Genomics, 7, 142. \doi{10.1186/1471-2164-7-142}
 Becker, R.A., Chambers, J.M., & Wilks, A.R. (1988). The New S Language.
 Wadsworth & Brooks/Cole. \doi{10.1201/9781351074988}
 }
+\seealso{
+\code{\link{run_DIpreprocess}}
+}
 \author{
 John Lennon L. Calorio
 }
