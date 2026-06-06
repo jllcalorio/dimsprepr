@@ -26,10 +26,10 @@ run_DIpreprocess(
   spline_spar_limit = c(-1.5, 1.5),
   correct_on_log = TRUE,
   min_qc_per_batch = 5L,
-  normalize_method = "sum",
+  normalize_method = "median",
   normalize_ref_sample = NULL,
-  normalize_qc_method = "median",
-  transform_method = "log2",
+  normalize_qc_method = "none",
+  transform_method = "log10",
   vsn_cores = 1L,
   scale_nonpls = "auto",
   scale_pls = "pareto",
@@ -97,30 +97,34 @@ could not correct. Default: \code{FALSE}.}
 
 \item{min_qc_per_batch}{Integer. Minimum QC samples per batch. Default: \code{5}.}
 
-\item{normalize_method}{Character. Normalization method.
+\item{normalize_method}{Character or character vector. One or more normalization
+methods to apply. When multiple methods are supplied every method is paired
+with every element of \code{transform_method} (Cartesian product).
 \itemize{
 \item \code{"sum"}: Normalizes by sum.
 \item \code{"median"}: Normalizes by median.
 \item \code{"specific_factor"}: Uses external factors in \code{norm_factor_col}.
 \item \code{"pqn_global"}: PQN using a global reference.
 \item \code{"pqn_reference"}: PQN using \code{normalize_ref_sample}.
-\item \code{"pqn_group"}: PQN grouping.
+\item \code{"pqn_group"}: PQN using pooled QC samples as reference.
 \item \code{"quantile"}: Quantile normalization.
 \item \code{"none"}: No normalization.
 }
-Default: \code{"sum"}.}
+Default: \code{"median"}.}
 
 \item{normalize_ref_sample}{Character. Reference sample name for PQN. Default: \code{NULL}.}
 
 \item{normalize_qc_method}{Character. QC normalization when using factors.
-One of \code{"mean"}, \code{"median"}, \code{"none"}. Default: \code{"median"}.}
+One of \code{"mean"}, \code{"median"}, \code{"none"}. Default: \code{"none"}.}
 
-\item{transform_method}{Character. Transformation method.
+\item{transform_method}{Character or character vector. One or more transformation
+methods to apply. When multiple methods are supplied every method is paired
+with every element of \code{normalize_method} (Cartesian product).
 \itemize{
 \item \code{"log2"}, \code{"log10"}, \code{"sqrt"}, \code{"cbrt"},
 \code{"clr"}, \code{"vsn"}, \code{"glog"}, or \code{"none"}.
 }
-Default: \code{"log2"}.}
+Default: \code{"log10"}.}
 
 \item{vsn_cores}{Integer or \code{"max"}. Cores for VSN. Default: \code{1}.}
 
@@ -146,21 +150,32 @@ Default: \code{"log2"}.}
 \item{verbose}{Logical. Print progress. Default: \code{TRUE}.}
 }
 \value{
-A named list of class \code{run_DIpreprocess} containing:
-\itemize{
-\item \code{metadata}: Processed sample metadata.
-\item \code{data_raw}: Original feature matrix.
-\item \code{data_nonpls}: Final NONPLS-scaled, filtered data.
-\item \code{data_pls}: Final PLS-scaled, filtered data.
-\item \code{features_final}: Character vector of retained features.
-\item \code{dimensions}: Sample and feature counts at each step.
-\item \code{elapsed_seconds}: Execution time.
+\describe{
+\item{Single combination (scalar \code{normalize_method} and scalar
+\code{transform_method})}{A named list of class \code{run_DIpreprocess}
+— identical to the original behaviour.}
+\item{Multiple combinations (either argument is a vector of length > 1)}{A
+named list of class \code{run_DIpreprocess_multi}.  Each element is named
+\code{<normalize>_<transform>} (e.g. \code{sum_log10}) and is itself a
+\code{run_DIpreprocess} object.  The shared pre-normalization data
+(post-drift-correction) is stored in the \code{shared} attribute.}
 }
 }
 \description{
 Runs a complete, sequential preprocessing pipeline for metabolomics data by
 orchestrating the individual \code{run_*} functions of \pkg{pondeR}. Steps
 execute in a fixed, reproducible order regardless of argument arrangement.
+
+When \code{normalize_method} and/or \code{transform_method} are supplied as
+character vectors with more than one element, \strong{all combinations} are
+computed.  The steps prior to normalization (validation, outlier removal,
+missing-value filtering, imputation, and drift/batch correction) are executed
+\strong{only once}; the normalization → transformation → scaling → quality
+filtering → replicate-merging branch is then repeated for every
+normalization × transformation pair.  The return value in this case is a
+plain \code{list} (class \code{"run_DIpreprocess_multi"}) whose elements are
+named \code{<normalize>_<transform>} and each hold a standard
+\code{run_DIpreprocess} object.
 }
 \details{
 \strong{Preprocessing Workflow (Fixed Order):}
@@ -170,19 +185,24 @@ execute in a fixed, reproducible order regardless of argument arrangement.
 \item Missing-value filtering (\code{\link{run_filtermissing}})
 \item Missing-value imputation (\code{\link{run_mvimpute}})
 \item Signal drift correction (\code{\link{run_driftBatchCorrect}})
-\item Normalization (\code{\link{run_normalize}})
-\item Transformation (\code{\link{run_transform}})
-\item Scaling (\code{\link{run_scale}})
-\item Quality filtering (\code{\link{run_filterRSD}}, \code{\link{run_filtervariance}})
-\item Common-feature harmonisation
+\item \emph{[Per combination]} Normalization (\code{\link{run_normalize}})
+\item \emph{[Per combination]} Transformation (\code{\link{run_transform}})
+\item \emph{[Per combination]} Scaling (\code{\link{run_scale}})
+\item \emph{[Per combination]} Quality filtering (\code{\link{run_filterRSD}},
+\code{\link{run_filtervariance}})
+\item \emph{[Per combination]} Common-feature harmonisation & replicate merging
 }
 }
 \note{
 \strong{Zero Handling:} The pipeline automatically converts all \code{0} values in
-\code{x} to \code{NA} prior to analysis. This represents a strong, domain-specific
-assumption (common in mass spectrometry metabolomics) that zeros signify structural
-missingness (e.g., values below the limit of detection) rather than a true biological
-absence.
+\code{x} to \code{NA} prior to analysis.
+
+\strong{Multi-method pre-flight checks:} When vectors are supplied for
+\code{normalize_method} or \code{transform_method}, the function validates
+all method-specific requirements (e.g. \code{norm_factor_col} for
+\code{"specific_factor"}, \code{normalize_ref_sample} for
+\code{"pqn_reference"}) \emph{before} executing any preprocessing step, so
+errors are surfaced early rather than mid-run.
 }
 \examples{
 \dontrun{
@@ -193,31 +213,51 @@ colnames(x) <- paste0("Feature", seq_len(n_f))
 x[sample(length(x), 400)] <- 0
 
 meta <- data.frame(
-  Sample          = paste0("S", seq_len(n_s)),
-  Group           = rep(c("Control", "Treatment", "QC"), c(30, 30, 20)),
-  Batch           = rep(1:2, each = 40),
+  Sample            = paste0("S", seq_len(n_s)),
+  Group             = rep(c("Control", "Treatment", "QC"), c(30, 30, 20)),
+  Batch             = rep(1:2, each = 40),
   InjectionSequence = seq_len(n_s),
-  SubjectID       = c(paste0("BIO", seq_len(60)), rep(NA, 20)),
-  stringsAsFactors = FALSE
+  SubjectID         = c(paste0("BIO", seq_len(60)), rep(NA, 20)),
+  stringsAsFactors  = FALSE
 )
 rownames(x) <- meta$Sample
 
-result <- run_DIpreprocess(
-  x              = x,
-  metadata       = meta,
+# --- Single combination (original behaviour) ---
+result_single <- run_DIpreprocess(
+  x                = x,
+  metadata         = meta,
   normalize_method = "pqn_group",
   transform_method = "log2",
-  scale_nonpls   = "auto",
-  scale_pls      = "pareto",
-  correct_drift  = FALSE
+  correct_drift    = FALSE
 )
+class(result_single)          # "run_DIpreprocess"
+dim(result_single$data_nonpls)
 
-dim(result$data_nonpls)
-result$dimensions
+# --- Multiple transform methods ---
+result_multi <- run_DIpreprocess(
+  x                = x,
+  metadata         = meta,
+  normalize_method = "median",
+  transform_method = c("log10", "vsn"),
+  correct_drift    = FALSE
+)
+class(result_multi)           # "run_DIpreprocess_multi"
+names(result_multi)           # "median_log10"  "median_vsn"
+
+# --- Full Cartesian product ---
+result_cart <- run_DIpreprocess(
+  x                = x,
+  metadata         = meta,
+  normalize_method = c("sum", "median"),
+  transform_method = c("log10", "vsn"),
+  correct_drift    = FALSE
+)
+names(result_cart)
+# "sum_log10"  "sum_vsn"  "median_log10"  "median_vsn"
 }
 }
 \references{
-Kirwan, J.A., et al. (2013). \emph{Analytical and Bioanalytical Chemistry}, 405, 5147–5157.
+Kirwan, J.A., et al. (2013). \emph{Analytical and Bioanalytical Chemistry}, 405, 5147-5157.
 }
 \seealso{
 \code{\link{run_filtermissing}}, \code{\link{run_mvimpute}},
