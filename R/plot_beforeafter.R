@@ -58,7 +58,7 @@
 #'   \code{"light"}, \code{"dark"}. Default is \code{"nature"} (a clean,
 #'   publication-ready style based on \code{theme_bw()}).
 #' @param base_size Numeric. Base font size for the theme (pts). Default is
-#'   \code{11}.
+#'   \code{15}.
 #' @param font_family Character. Font family for all text elements. Default
 #'   is \code{"sans"}.
 #' @param seed Numeric or \code{NULL}. Random seed passed to \code{set.seed()}
@@ -160,7 +160,7 @@ plot_beforeafter <- function(
     point_alpha      = 0.7,
     plot_cols        = NULL,
     theme            = "nature",
-    base_size        = 11,
+    base_size        = 15,
     font_family      = "sans",
     seed             = 123,
     global_font_size = NULL,
