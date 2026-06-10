@@ -17,8 +17,10 @@ run_DIpreprocess(
   outliers = NULL,
   missing_threshold = 0.2,
   missing_by_group = TRUE,
+  missing_any_group = TRUE,
   missing_include_qc = FALSE,
-  impute_fraction = 0.2,
+  impute_method = 0.2,
+  impute_method_post_drift = NULL,
   positive_only = TRUE,
   correct_drift = TRUE,
   remove_uncorrected = FALSE,
@@ -38,6 +40,7 @@ run_DIpreprocess(
   variance_percentile = 10,
   scale_filter_ref = "auto",
   merge_replicates = FALSE,
+  track = NULL,
   verbose = TRUE
 )
 }
@@ -77,10 +80,17 @@ to remove before processing. Default: \code{NULL}.}
 
 \item{missing_by_group}{Logical. If \code{TRUE}, assess per group. Default: \code{TRUE}.}
 
+\item{missing_any_group}{Logical. Only used when \code{missing_by_group = TRUE}.
+If \code{TRUE} (default), a feature is retained if its missingness is below
+the threshold in at least one group (Modified 80\% Rule). If \code{FALSE},
+it must satisfy the threshold in all groups.}
+
 \item{missing_include_qc}{Logical. If \code{TRUE}, include QC samples. Default: \code{FALSE}.}
 
-\item{impute_fraction}{Numeric > 0. Fraction of the smallest positive value
+\item{impute_method}{Numeric > 0. Fraction of the smallest positive value
 per feature used for imputation. Default: \code{0.2}.}
+
+\item{impute_method_post_drift}{Missing value imputation after signal drift and batch correction.}
 
 \item{positive_only}{Logical. If \code{TRUE}, imputation only considers positive values. Default: \code{TRUE}.}
 
@@ -146,6 +156,10 @@ Default: \code{"log10"}.}
 }}
 
 \item{merge_replicates}{Logical. Average technical replicates. Default: \code{FALSE}.}
+
+\item{track}{Character vector or \code{NULL}. Feature names to monitor across
+preprocessing steps. If a tracked feature is removed, the step and reason
+(e.g., missingness percentage, RSD value) are recorded. Default: \code{NULL}.}
 
 \item{verbose}{Logical. Print progress. Default: \code{TRUE}.}
 }

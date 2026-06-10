@@ -39,9 +39,14 @@
 #'   to remove before processing. Default: \code{NULL}.
 #' @param missing_threshold Numeric \[0, 1\]. Missing value threshold. Default: \code{0.2}.
 #' @param missing_by_group Logical. If \code{TRUE}, assess per group. Default: \code{TRUE}.
+#' @param missing_any_group Logical. Only used when \code{missing_by_group = TRUE}. 
+#'   If \code{TRUE} (default), a feature is retained if its missingness is below 
+#'   the threshold in at least one group (Modified 80% Rule). If \code{FALSE}, 
+#'   it must satisfy the threshold in all groups.
 #' @param missing_include_qc Logical. If \code{TRUE}, include QC samples. Default: \code{FALSE}.
-#' @param impute_fraction Numeric > 0. Fraction of the smallest positive value
+#' @param impute_method Numeric > 0. Fraction of the smallest positive value
 #'   per feature used for imputation. Default: \code{0.2}.
+#' @param impute_method_post_drift Missing value imputation after signal drift and batch correction.
 #' @param positive_only Logical. If \code{TRUE}, imputation only considers positive values. Default: \code{TRUE}.
 #' @param correct_drift Logical. If \code{TRUE}, apply QCRSC correction. Default: \code{TRUE}.
 #' @param remove_uncorrected Logical. If \code{TRUE}, remove features QCRSC
@@ -88,6 +93,9 @@
 #'   \item \code{"PLS"}: Apply PLS filters to both.
 #' }
 #' @param merge_replicates Logical. Average technical replicates. Default: \code{FALSE}.
+#' @param track Character vector or \code{NULL}. Feature names to monitor across 
+#'   preprocessing steps. If a tracked feature is removed, the step and reason 
+#'   (e.g., missingness percentage, RSD value) are recorded. Default: \code{NULL}.
 #' @param verbose Logical. Print progress. Default: \code{TRUE}.
 #'
 #' @return
@@ -211,10 +219,12 @@ run_DIpreprocess <- function(
     # — Missing-value filter ——————————————————————————————————————————————————
     missing_threshold  = 0.2,
     missing_by_group   = TRUE,
+    missing_any_group  = TRUE,
     missing_include_qc = FALSE,
 
     # — Missing-value imputation ——————————————————————————————————————————————
-    impute_fraction  = 0.2,
+    impute_method  = 0.2,
+    impute_method_post_drift = NULL,
     positive_only    = TRUE,
 
     # — Drift / batch correction ——————————————————————————————————————————————
@@ -246,6 +256,7 @@ run_DIpreprocess <- function(
 
     # — Replicate merging —————————————————————————————————————————————————————
     merge_replicates = FALSE,
+    track            = NULL,
 
     verbose          = TRUE
 ) {
@@ -271,10 +282,18 @@ run_DIpreprocess <- function(
                stringsAsFactors = FALSE)
   }
 
+  .track_init <- function() {
+    data.frame(Feature = character(), Step = character(), Value = character(),
+               stringsAsFactors = FALSE)
+  }
+
   # ---------------------------------------------------------------------------
   # PRE-FLIGHT: validate method vectors and method-specific requirements
   # ---------------------------------------------------------------------------
 
+  if (!is.null(track) && !is.character(track))
+      stop("'track' must be a character vector of feature names.")
+  
   valid_norm_methods <- c("sum", "median", "specific_factor", "pqn_global",
                           "pqn_reference", "pqn_group", "quantile", "none")
   valid_trans_methods <- c("log2", "log10", "sqrt", "cbrt", "clr",
@@ -399,6 +418,7 @@ run_DIpreprocess <- function(
     data_corrected       = NULL,
     uncorrected_features = character(0L),
     dimensions           = .empty_dims(),
+    track                = .track_init(),
     error                = NULL
   )
 
@@ -419,9 +439,21 @@ run_DIpreprocess <- function(
     if (!is.numeric(missing_threshold) || length(missing_threshold) != 1L ||
         missing_threshold < 0 || missing_threshold > 1)
       stop("'missing_threshold' must be a single numeric value in [0, 1].")
-    if (!is.numeric(impute_fraction) || length(impute_fraction) != 1L ||
-        impute_fraction <= 0)
-      stop("'impute_fraction' must be a single positive numeric value.")
+    # if (!is.numeric(impute_method) || length(impute_method) != 1L ||
+    #     impute_method <= 0)
+    #   stop("'impute_method' must be a single positive numeric value.")
+    .is_valid_impute <- function(m) {
+      (is.numeric(m) && length(m) == 1L && m > 0) ||
+      (is.character(m) && length(m) == 1L)
+    }
+    
+    if (!.is_valid_impute(impute_method)) {
+      stop("'impute_method' must be a single positive numeric value or a character string (e.g., 'none').")
+    }
+    
+    if (!is.null(impute_method_post_drift) && !.is_valid_impute(impute_method_post_drift)) {
+      stop("'impute_method_post_drift' must be NULL, a positive numeric value, or a character string.")
+    }
     if (!scale_filter_ref %in% c("auto", "NONPLS", "PLS"))
       stop("'scale_filter_ref' must be one of: 'auto', 'NONPLS', 'PLS'.")
     if (!rsd_qc_type %in% c("QC", "SQC", "EQC"))
@@ -558,6 +590,15 @@ run_DIpreprocess <- function(
 
     all_na <- colSums(is.na(df)) == nrow(df)
     if (any(all_na)) {
+      if (!is.null(track)) {
+        lost_na <- intersect(track, names(all_na)[all_na])
+        for (f in lost_na) {
+          shared$track <- rbind(shared$track, data.frame(
+            Feature = f, Step = "All-NA removal", Value = "100% missing",
+            stringsAsFactors = FALSE
+          ))
+        }
+      }
       df <- df[, !all_na, drop = FALSE]
       msg(sprintf("  Removed %d all-NA feature(s). %d remaining.",
                   sum(all_na), ncol(df)))
@@ -573,11 +614,13 @@ run_DIpreprocess <- function(
     msg(sprintf("Step 3/10: Missing-value filtering (threshold = %.0f%%)...",
                 missing_threshold * 100))
 
+    df_before_miss <- df
     filt_miss <- run_filtermissing(
       x               = df,
       metadata        = metadata,
       threshold       = missing_threshold,
       filter_by_group = missing_by_group,
+      any_group       = missing_any_group,
       include_QC      = missing_include_qc,
       group_col       = group_col,
       qc_types        = qc_types,
@@ -586,6 +629,26 @@ run_DIpreprocess <- function(
     )
 
     df                        <- filt_miss$data
+
+    if (!is.null(track)) {
+      lost_miss <- setdiff(intersect(track, colnames(df_before_miss)), colnames(df))
+      for (f in lost_miss) {
+        vals <- df_before_miss[[f]]
+        gps  <- as.character(metadata[[group_col]])
+        unique_gps <- sort(unique(gps))
+        miss_info <- vapply(unique_gps, function(g) {
+          sub <- vals[gps == g]
+          sprintf("%s=%.0f%%", g, (sum(is.na(sub)) / length(sub)) * 100)
+        }, character(1L))
+
+        shared$track <- rbind(shared$track, data.frame(
+          Feature = f, Step = "Missing value", 
+          Value = paste(miss_info, collapse = ", "),
+          stringsAsFactors = FALSE
+        ))
+      }
+    }
+
     shared$data_missing_filtered <- df
     shared$dimensions         <- .record_dim(shared$dimensions, "After missing filter", df)
 
@@ -598,18 +661,18 @@ run_DIpreprocess <- function(
     # 4. MISSING-VALUE IMPUTATION
     # =========================================================================
 
-    msg(sprintf("Step 4/10: Imputing missing values (fraction = %.4f)...",
-                impute_fraction))
+    msg(sprintf("Step 4/10: Imputing missing values (method = %s)...",
+                as.character(impute_method)))
 
     imp <- run_mvimpute(
       x             = df,
-      method        = impute_fraction,
+      method        = impute_method,
       positive_only = positive_only,
       verbose       = FALSE
     )
     df                   <- imp$data
     shared$data_imputed  <- df
-    msg(sprintf("  Imputed %d missing value(s).", imp$n_missing_before))
+    msg(sprintf("  Imputed %d missing value(s).", imp$n_missing_before - imp$n_missing_after))
 
     # =========================================================================
     # 5. SIGNAL DRIFT AND BATCH CORRECTION
@@ -650,6 +713,15 @@ run_DIpreprocess <- function(
       uncorrected_features <- corr_result$uncorrected_features
 
       if (remove_uncorrected && length(uncorrected_features) > 0L) {
+        if (!is.null(track)) {
+          lost_drift <- intersect(track, uncorrected_features)
+          for (f in lost_drift) {
+            shared$track <- rbind(shared$track, data.frame(
+              Feature = f, Step = "Drift correction", Value = "Uncorrected",
+              stringsAsFactors = FALSE
+            ))
+          }
+        }
         corr_df <- corr_result$data
         keep    <- setdiff(colnames(corr_df), uncorrected_features)
         df      <- corr_df[, keep, drop = FALSE]
@@ -667,12 +739,22 @@ run_DIpreprocess <- function(
       new_na         <- na_after_corr - na_before_corr
 
       if (na_after_corr > 0L) {
-        imp_r <- run_mvimpute(x = df, method = impute_fraction, verbose = FALSE)
-        df    <- imp_r$data
-        msg(sprintf(
-          "  Re-imputed %d NA(s) after QCRSC (%d newly introduced, %d pre-existing).",
-          na_after_corr, max(0L, new_na), max(0L, -new_na)
-        ))
+        # Fall back to first method if second is not explicitly set
+        post_method <- if (is.null(impute_method_post_drift)) impute_method else impute_method_post_drift
+
+        if (is.character(post_method) && tolower(trimws(post_method)) == "none") {
+          msg(sprintf(
+            "  %d NA(s) present after QCRSC (%d newly introduced), but post-drift imputation is set to 'none'. Skipping.",
+            na_after_corr, max(0L, new_na)
+          ))
+        } else {
+          imp_r <- run_mvimpute(x = df, method = post_method, positive_only = positive_only, verbose = FALSE)
+          df    <- imp_r$data
+          msg(sprintf(
+            "  Re-imputed %d NA(s) after QCRSC (%d newly introduced, %d pre-existing) using method: %s.",
+            na_after_corr, max(0L, new_na), na_after_corr - max(0L, new_na), as.character(post_method)
+          ))
+        }
       }
 
       msg(sprintf("  QCRSC applied (%s).", corr_result$method_used))
@@ -700,6 +782,7 @@ run_DIpreprocess <- function(
           data_nonpls      = NULL, data_pls         = NULL,
           data_nonpls_merged = NULL, data_pls_merged  = NULL,
           metadata_merged  = NULL, features_final   = character(0L),
+          track            = shared$track,
           elapsed_seconds  = proc.time()[["elapsed"]] - t_start,
           parameters       = as.list(match.call()[-1L])
         )),
@@ -730,17 +813,44 @@ run_DIpreprocess <- function(
       metadata_merged       = NULL,
       features_final        = character(0L),
       uncorrected_features  = shared$uncorrected_features,
+      track                 = shared$track,
       dimensions            = shared$dimensions,
       parameters            = list(
-        normalize_method = norm_m,
-        transform_method = trans_m,
-        scale_nonpls     = scale_nonpls,
-        scale_pls        = scale_pls,
-        rsd_threshold    = rsd_threshold,
-        rsd_qc_type      = rsd_qc_type,
-        variance_percentile = variance_percentile,
-        scale_filter_ref = scale_filter_ref,
-        merge_replicates = merge_replicates
+        sample_id_col        = sample_id_col,
+        group_col            = group_col,
+        qc_types             = qc_types,
+        batch_col            = batch_col,
+        injection_col        = injection_col,
+        norm_factor_col      = norm_factor_col,
+        subject_id_col       = subject_id_col,
+        outliers             = outliers,
+        missing_threshold    = missing_threshold,
+        missing_by_group     = missing_by_group,
+        missing_any_group    = missing_any_group,
+        missing_include_qc   = missing_include_qc,
+        impute_method      = impute_method,
+        impute_method_post_drift = impute_method_post_drift,
+        positive_only        = positive_only,
+        correct_drift        = correct_drift,
+        remove_uncorrected   = remove_uncorrected,
+        spline_smooth        = spline_smooth,
+        spline_spar_limit    = spline_spar_limit,
+        correct_on_log       = correct_on_log,
+        min_qc_per_batch     = min_qc_per_batch,
+        normalize_method     = norm_m,     # combination-specific
+        normalize_ref_sample = normalize_ref_sample,
+        normalize_qc_method  = normalize_qc_method,
+        transform_method     = trans_m,    # combination-specific
+        vsn_cores            = vsn_cores,
+        scale_nonpls         = scale_nonpls,
+        scale_pls            = scale_pls,
+        rsd_threshold        = rsd_threshold,
+        rsd_qc_type          = rsd_qc_type,
+        variance_percentile  = variance_percentile,
+        scale_filter_ref     = scale_filter_ref,
+        merge_replicates     = merge_replicates,
+        track                = track,
+        verbose              = verbose
       ),
       elapsed_seconds = NA_real_,
       error           = NULL
@@ -823,12 +933,13 @@ run_DIpreprocess <- function(
         combo_label, rsd_threshold * 100, variance_percentile, scale_filter_ref
       ))
 
+      # .filter_branch now returns its track entries rather than
+      # trying to write them into branch_out directly (which silently wrote
+      # to a local copy and discarded the result).
       .filter_branch <- function(data, branch_name) {
-        # Inside .run_branch, metadata$Group_ has already collapsed all
-        # user-supplied qc_types (e.g. "EQC", "SQC") to the single token "QC".
-        # Both qc_type and qc_types must therefore use "QC" here so that
-        # run_filterRSD's internal validation does not reject the label.
-        rsd_res  <- run_filterRSD(
+        local_track <- branch_out$track   # snapshot; additions appended here
+
+        rsd_res <- run_filterRSD(
           x        = data,
           metadata = metadata,
           max_rsd  = rsd_threshold,
@@ -837,6 +948,24 @@ run_DIpreprocess <- function(
           qc_types = "QC",
           verbose  = FALSE
         )
+
+        if (!is.null(track)) {
+          lost_rsd <- setdiff(intersect(track, colnames(data)), colnames(rsd_res$data))
+          for (f in lost_rsd) {
+            qc_vals <- data[metadata$Group_ == "QC", f]
+            m_val   <- mean(qc_vals, na.rm = TRUE)
+            rsd_val <- if (!is.na(m_val) && m_val != 0)
+                         sd(qc_vals, na.rm = TRUE) / m_val
+                       else NA_real_
+            local_track <- rbind(local_track, data.frame(
+              Feature = f,
+              Step    = "RSD filter",
+              Value   = if (is.na(rsd_val)) "NA" else sprintf("%.1f%%", rsd_val * 100),
+              stringsAsFactors = FALSE
+            ))
+          }
+        }
+
         data_rsd <- rsd_res$data
         if (is.logical(data_rsd) || is.null(data_rsd) || is.null(ncol(data_rsd)))
           data_rsd <- data[, 0L, drop = FALSE]
@@ -847,26 +976,47 @@ run_DIpreprocess <- function(
         if (ncol(data_rsd) == 0L) {
           msg(sprintf("    [%s][%s] Variance: skipped (0 features).",
                       combo_label, branch_name))
-          return(list(rsd = data_rsd, final = data_rsd))
+          return(list(rsd = data_rsd, final = data_rsd, track = local_track))
         }
 
-        var_res  <- run_filtervariance(
+        var_res <- run_filtervariance(
           x          = data_rsd,
           percentile = variance_percentile,
           verbose    = FALSE
         )
+
+        if (!is.null(track)) {
+          lost_var <- setdiff(intersect(track, colnames(data_rsd)), colnames(var_res$data))
+          for (f in lost_var) {
+            v_val <- var(data_rsd[[f]], na.rm = TRUE)
+            local_track <- rbind(local_track, data.frame(
+              Feature = f,
+              Step    = "Variance filter",
+              Value   = sprintf("Var=%.2e", v_val),
+              stringsAsFactors = FALSE
+            ))
+          }
+        }
+
         data_var <- var_res$data
         if (is.logical(data_var) || is.null(data_var) || is.null(ncol(data_var)))
           data_var <- data_rsd[, 0L, drop = FALSE]
 
         msg(sprintf("    [%s][%s] Variance: removed %d. %d remaining.",
                     combo_label, branch_name, var_res$n_features_removed, ncol(data_var)))
-        list(rsd = data_rsd, final = data_var)
+
+        list(rsd = data_rsd, final = data_var, track = local_track)
       }
 
       if (scale_filter_ref == "auto") {
         filt_nonpls <- .filter_branch(df_nonpls, "NONPLS")
         filt_pls    <- .filter_branch(df_pls,    "PLS")
+
+        # Merge track entries from both branches (deduplicate by Feature+Step)
+        if (!is.null(track)) {
+          combined_track <- unique(rbind(filt_nonpls$track, filt_pls$track))
+          branch_out$track <- combined_track
+        }
 
         branch_out$dimensions <- .record_dim(branch_out$dimensions,
           sprintf("[%s] After NONPLS RSD filter", combo_label), filt_nonpls$rsd)
@@ -884,8 +1034,24 @@ run_DIpreprocess <- function(
             "Consider relaxing 'rsd_threshold' or 'variance_percentile'.", combo_label
           ))
 
+        # Harmonisation tracking — only reachable when scale_filter_ref == "auto"
+        if (!is.null(track)) {
+          all_passed_either <- unique(c(colnames(filt_nonpls$final), colnames(filt_pls$final)))
+          lost_harm <- setdiff(intersect(track, all_passed_either), features_final)
+          for (f in lost_harm) {
+            branch_out$track <- rbind(branch_out$track, data.frame(
+              Feature = f,
+              Step    = "Harmonisation",
+              Value   = "Removed in other branch",
+              stringsAsFactors = FALSE
+            ))
+          }
+        }
+
       } else if (scale_filter_ref == "NONPLS") {
         filt_nonpls <- .filter_branch(df_nonpls, "NONPLS")
+
+        if (!is.null(track)) branch_out$track <- filt_nonpls$track
 
         branch_out$dimensions <- .record_dim(branch_out$dimensions,
           sprintf("[%s] After NONPLS RSD filter", combo_label), filt_nonpls$rsd)
@@ -901,6 +1067,8 @@ run_DIpreprocess <- function(
       } else {  # "PLS"
         filt_pls <- .filter_branch(df_pls, "PLS")
 
+        if (!is.null(track)) branch_out$track <- filt_pls$track
+
         branch_out$dimensions <- .record_dim(branch_out$dimensions,
           sprintf("[%s] After PLS RSD filter", combo_label), filt_pls$rsd)
         branch_out$dimensions <- .record_dim(branch_out$dimensions,
@@ -911,6 +1079,18 @@ run_DIpreprocess <- function(
           stop(sprintf(
             "[%s] No features passed quality filtering (PLS branch).", combo_label
           ))
+      }
+
+      if (!is.null(track)) {
+        # Features that passed individual branch filters but failed intersection
+        all_passed_either <- unique(c(colnames(filt_nonpls$final), colnames(filt_pls$final)))
+        lost_harm <- setdiff(intersect(track, all_passed_either), features_final)
+        for (f in lost_harm) {
+          branch_out$track <- rbind(branch_out$track, data.frame(
+            Feature = f, Step = "Harmonisation", Value = "Removed in other branch",
+            stringsAsFactors = FALSE
+          ))
+        }
       }
 
       msg(sprintf("  [%s] Final feature set: %d feature(s).", combo_label, length(features_final)))
@@ -1021,7 +1201,42 @@ run_DIpreprocess <- function(
     out <- .run_branch(normalize_method, transform_method, combo_names)
 
     # Back-fill parameters with the full original call
-    out$parameters <- as.list(match.call()[-1L])
+    out$parameters <- list(
+      sample_id_col        = sample_id_col,
+      group_col            = group_col,
+      qc_types             = qc_types,
+      batch_col            = batch_col,
+      injection_col        = injection_col,
+      norm_factor_col      = norm_factor_col,
+      subject_id_col       = subject_id_col,
+      outliers             = outliers,
+      missing_threshold    = missing_threshold,
+      missing_by_group     = missing_by_group,
+      missing_any_group    = missing_any_group,
+      missing_include_qc   = missing_include_qc,
+      impute_method      = impute_method,
+      positive_only        = positive_only,
+      correct_drift        = correct_drift,
+      remove_uncorrected   = remove_uncorrected,
+      spline_smooth        = spline_smooth,
+      spline_spar_limit    = spline_spar_limit,
+      correct_on_log       = correct_on_log,
+      min_qc_per_batch     = min_qc_per_batch,
+      normalize_method     = normalize_method,
+      normalize_ref_sample = normalize_ref_sample,
+      normalize_qc_method  = normalize_qc_method,
+      transform_method     = transform_method,
+      vsn_cores            = vsn_cores,
+      scale_nonpls         = scale_nonpls,
+      scale_pls            = scale_pls,
+      rsd_threshold        = rsd_threshold,
+      rsd_qc_type          = rsd_qc_type,
+      variance_percentile  = variance_percentile,
+      scale_filter_ref     = scale_filter_ref,
+      merge_replicates     = merge_replicates,
+      track                = track,
+      verbose              = verbose
+    )
 
     out$elapsed_seconds <- proc.time()[["elapsed"]] - t_start
     msg(sprintf("Pipeline completed successfully. Elapsed: %.1f second(s).",
@@ -1089,6 +1304,8 @@ print.run_DIpreprocess <- function(x, ...) {
   if (length(x$uncorrected_features) > 0L)
     cat(sprintf("QCRSC  : %d uncorrected feature(s) retained\n",
                 length(x$uncorrected_features)))
+  if (!is.null(x$track) && nrow(x$track) > 0L)
+    cat(sprintf("Track  : %d features tracked in removal summary\n", nrow(x$track)))
   cat(sprintf("Time   : %.1f second(s)\n", x$elapsed_seconds))
   invisible(x)
 }
