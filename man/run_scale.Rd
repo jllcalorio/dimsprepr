@@ -4,7 +4,7 @@
 \alias{run_scale}
 \title{Scale Metabolomics Data}
 \usage{
-run_scale(x, method = "auto", verbose = TRUE)
+run_scale(x, method = "auto", metadata = NULL, group = "Group", verbose = TRUE)
 }
 \arguments{
 \item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.}
@@ -14,12 +14,27 @@ run_scale(x, method = "auto", verbose = TRUE)
 \item \code{"mean"}: Mean-centering only (centers distribution at zero)
 \item \code{"auto"}: Auto-scaling (mean-centering + unit variance scaling)
 \item \code{"pareto"}: Pareto-scaling (mean-centering + sqrt(SD) scaling)
+\item \code{"ln"}: Logarithm (ln) transformation
+\item \code{"vast"}: VAST scaling (auto-scaling weighted by CV)
+\item \code{"svast"}: Supervised VAST scaling (auto-scaling weighted by
+mean class CV)
+\item \code{"xvast"}: Extended supervised VAST scaling (auto-scaling
+weighted by maximum class CV)
+\item \code{"none"}: No scaling method applied
 }}
 
-\item{verbose}{Logical. Print progress messages. Default: TRUE.}
+\item{metadata}{Data frame. Sample metadata with \code{nrow(metadata) == nrow(x)}.
+Required when \code{method} is \code{"svast"} or \code{"xvast"}; ignored
+otherwise. Default: \code{NULL}.}
+
+\item{group}{Character. Name of the column in \code{metadata} that contains
+group/class labels. Required when \code{method} is \code{"svast"} or
+\code{"xvast"}. Default: \code{"Group"}.}
+
+\item{verbose}{Logical. Print progress messages. Default: \code{TRUE}.}
 }
 \value{
-A list containing:
+A list of class \code{"run_scale"} containing:
 \item{data}{Matrix or data frame of scaled data (same class as input \code{x})}
 \item{scaling_factors}{Numeric vector of scaling factors applied to each feature}
 \item{center_values}{Numeric vector of centering values (means) for each feature}
@@ -28,7 +43,8 @@ A list containing:
 }
 \description{
 Applies various scaling methods to standardize features and prepare data
-for multivariate analysis.
+for multivariate analysis. Includes classical scaling methods as well as
+variance-stability (VAST) scaling variants.
 }
 \details{
 \strong{Scaling Methods:}
@@ -41,31 +57,35 @@ Each feature is mean-centered and divided by its standard deviation,
 resulting in mean = 0 and SD = 1 for all features. This gives equal weight
 to all features regardless of their original variance.
 
-\strong{Recommended for:}
-\itemize{
-\item Principal Component Analysis (PCA)
-\item Hierarchical clustering
-\item Correlation analysis
-\item t-tests and ANOVA
-\item Most univariate and multivariate methods
-}
-
-Auto-scaling can amplify noise in low-variance features.
+\strong{Recommended for:} PCA, hierarchical clustering, correlation analysis,
+t-tests and ANOVA, and most univariate and multivariate methods.
+Note that auto-scaling can amplify noise in low-variance features.
 \item \strong{pareto}: Pareto-scaling. Each feature is mean-centered and divided by
 the square root of its standard deviation. This provides a compromise between
 no scaling and auto-scaling, reducing the influence of large values while
 preserving some of the original variance structure.
 
-\strong{Recommended for:}
-\itemize{
-\item PLS-DA (Partial Least Squares Discriminant Analysis)
-\item OPLS-DA (Orthogonal PLS-DA)
-\item sPLS-DA (Sparse PLS-DA)
-\item Other PLS-type methods
-}
+\strong{Recommended for:} PLS-DA, OPLS-DA, sPLS-DA, and other PLS-type methods.
+\item \strong{ln}: Logarithm (ln) transformation. Each feature is transformed using
+the natural logarithm. This is a non-linear transformation included for
+cases where log-transformation is desired as part of the scaling step
+(e.g., to reduce the influence of large values).
+\item \strong{vast}: VAST (Variable Stability) scaling. Extends auto-scaling by
+additionally weighting each feature by its overall coefficient of variation
+(CV = mean / SD). The scaling factor is \eqn{s_k / ({\bar{x}_k / s_k})} = \eqn{s_k^2 / \bar{x}_k}.
+Features with stable measurements (low CV) receive higher weights than
+noisy features. Equivalent to dividing auto-scaled data by the overall CV.
 
-Pareto-scaling is generally preferred for discriminant analysis as it
-balances the importance of large and small features better than auto-scaling.
+\strong{Recommended for:} NMR-based metabolic profiling; data where measurement
+stability varies across features.
+\item \strong{svast}: Supervised VAST (s-VAST) scaling. A group-aware extension of
+VAST that weights each feature by the average of its within-class CVs
+(\eqn{(1/n)\sum_{j=1}^{n} \bar{x}_{jk}/s_{jk}}), rewarding features that
+are stable within classes. Requires \code{group}.
+\item \strong{xvast}: Extended supervised VAST (x-VAST) scaling, introduced by
+Yang et al. (2015). Weights each feature by the \emph{maximum} within-class
+ratio \eqn{\max(\bar{x}_{1k}/s_{1k}, \ldots, \bar{x}_{nk}/s_{nk})}, placing
+emphasis on the class in which a feature is most stable. Requires \code{group}.
 }
 
 \strong{Choosing a Scaling Method:}
@@ -75,6 +95,8 @@ The choice depends on your downstream analysis:
 \item For exploratory data analysis (PCA, clustering): \strong{auto-scaling}
 \item For classification/discrimination (PLS-DA): \strong{Pareto-scaling}
 \item When feature magnitudes carry meaning: \strong{mean-centering}
+\item For NMR/metabolomics with variable measurement stability: \strong{VAST}
+\item When class-specific stability is important: \strong{s-VAST} or \strong{x-VAST}
 }
 }
 \examples{
@@ -84,6 +106,7 @@ set.seed(123)
 x <- matrix(rnorm(100 * 50, mean = 100, sd = 50),
             nrow = 100, ncol = 50)
 colnames(x) <- paste0("Feature", 1:50)
+group <- rep(c("A", "B"), each = 50)
 
 # Auto-scaling for PCA
 result1 <- run_scale(x, method = "auto")
@@ -91,16 +114,37 @@ result1 <- run_scale(x, method = "auto")
 # Pareto-scaling for PLS-DA
 result2 <- run_scale(x, method = "pareto")
 
+# Log (ln) transformation
+result_ln <- run_scale(x, method = "ln")
+
 # Mean-centering only
 result3 <- run_scale(x, method = "mean")
+
+# VAST scaling
+result4 <- run_scale(x, method = "vast")
+
+# Supervised VAST scaling
+result5 <- run_scale(x, method = "svast", group = group)
+
+# Extended supervised VAST scaling (Yang et al., 2015)
+result6 <- run_scale(x, method = "xvast", group = group)
 }
 }
 \references{
 van den Berg, R.A., Hoefsloot, H.C., Westerhuis, J.A., Smilde, A.K., & van der Werf, M.J. (2006).
 Centering, scaling, and transformations: improving the biological information content of
-metabolomics data. BMC Genomics, 7, 142. \doi{10.1186/1471-2164-7-142}
+metabolomics data. \emph{BMC Genomics}, 7, 142. \doi{10.1186/1471-2164-7-142}
 
-Becker, R.A., Chambers, J.M., & Wilks, A.R. (1988). The New S Language.
+Keun, H.C., Ebbels, T.M.D., Antti, H., Bollard, M.E., Beckonert, O., Holmes, E., et al. (2003).
+Improved analysis of multivariate data by variable stability scaling: application to
+NMR-based metabolic profiling. \emph{Analytica Chimica Acta}, 490, 265–276.
+\doi{10.1016/S0003-2670(03)00094-1}
+
+Yang, J., Zhao, X., Lu, X., Lin, X., & Xu, G. (2015). A data preprocessing strategy for
+metabolomics to reduce the mask effect in data analysis. \emph{Frontiers in Molecular
+Biosciences}, 2, 4. \doi{10.3389/fmolb.2015.00004}
+
+Becker, R.A., Chambers, J.M., & Wilks, A.R. (1988). \emph{The New S Language}.
 Wadsworth & Brooks/Cole. \doi{10.1201/9781351074988}
 }
 \seealso{
