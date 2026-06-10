@@ -33,7 +33,7 @@ May contain normalization factors, group labels, and QC sample identifiers.}
 \item \code{"pqn_global"}: Probabilistic Quotient Normalization using global median
 \item \code{"pqn_reference"}: PQN using a specific reference sample (specify via \code{ref_sample})
 \item \code{"pqn_group"}: PQN using pooled QC samples as reference
-\item \code{"quantile"}: Quantile normalization
+\item \code{"pqn"}: Probabilistic Quotient Normalization
 \item \code{"col_rel_abundance"}: Relative abundance per column (feature); each value
 divided by its column sum so each feature sums to 1 across all samples
 \item \code{"row_rel_abundance"}: Relative abundance per row (sample); each value

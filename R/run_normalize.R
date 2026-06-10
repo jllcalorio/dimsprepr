@@ -15,7 +15,7 @@
 #'     \item \code{"pqn_global"}: Probabilistic Quotient Normalization using global median
 #'     \item \code{"pqn_reference"}: PQN using a specific reference sample (specify via `ref_sample`)
 #'     \item \code{"pqn_group"}: PQN using pooled QC samples as reference
-#'     \item \code{"quantile"}: Quantile normalization
+#'     \item \code{"pqn"}: Probabilistic Quotient Normalization
 #'     \item \code{"col_rel_abundance"}: Relative abundance per column (feature); each value
 #'       divided by its column sum so each feature sums to 1 across all samples
 #'     \item \code{"row_rel_abundance"}: Relative abundance per row (sample); each value
@@ -219,7 +219,7 @@ run_normalize <- function(
                        
                        "sum" = {
                          msg("Normalizing by total sum...")
-                         row_sums <- rowSums(x_matrix, na.rm = TRUE) # from matrixStats::rowMedians to base R rowSums to avoid dependency for this simple operation
+                         row_sums <- matrixStats::rowSums2(x_matrix, na.rm = TRUE)
                          all_factors <- row_sums
                          x_matrix / row_sums
                        },
@@ -323,7 +323,7 @@ run_normalize <- function(
                          x_matrix / median_quotients
                        },
                        
-                       "quantile" = {
+                       "pqn" = {
                          if (!requireNamespace("pmp", quietly = TRUE)) {
                            stop("Package 'pmp' required for quantile normalization. ",
                                 "Install it with: BiocManager::install('pmp')")
@@ -374,7 +374,7 @@ run_normalize <- function(
                        {
                          stop("Unknown normalization method '", method, "'. ",
                               "Supported: 'sum', 'median', 'specific_factor', 'pqn_global', ",
-                              "'pqn_reference', 'pqn_group', 'quantile', ",
+                              "'pqn_reference', 'pqn_group', 'pqn', ",
                               "'col_rel_abundance', 'row_rel_abundance'")
                        }
     )
