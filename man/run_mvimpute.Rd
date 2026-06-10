@@ -37,6 +37,8 @@ Controlled further by \code{tune_sigma}.
 \code{"cart"}, etc. Delegates to \code{\link[mice]{mice}} from the
 \pkg{mice} package. Controlled further by \code{m}, \code{maxit}, \code{seed},
 and \code{...}.
+\item \strong{\code{"none"}} — Skips missing value imputation entirely and returns
+the data exactly as-is. Useful for deferring imputation to a later step.
 }
 Default: \code{0.2} (1/5th of minimum, deterministic).}
 

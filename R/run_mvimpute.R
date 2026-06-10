@@ -25,6 +25,8 @@
 #'       `"cart"`, etc. Delegates to \code{\link[mice]{mice}} from the
 #'       \pkg{mice} package. Controlled further by `m`, `maxit`, `seed`,
 #'       and `...`.
+#'     \item **`"none"`** — Skips missing value imputation entirely and returns 
+#'       the data exactly as-is. Useful for deferring imputation to a later step.
 #'   }
 #'   Default: `0.2` (1/5th of minimum, deterministic).
 #' @param positive_only Logical. Only used when `method` is numeric. If `TRUE`
@@ -279,7 +281,24 @@ run_mvimpute <- function(
 
     method_lc <- tolower(trimws(method))
 
-    if (method_lc == "quantileregression") {
+    if (method_lc == "none") {
+      msg("Method set to 'none'. No missing value imputation performed.")
+      return(list(
+        data             = if (was_matrix) x_matrix else as.data.frame(x_matrix),
+        n_missing_before = n_missing_before,
+        n_missing_after  = n_missing_before, # NAs remain
+        imputed_summary  = data.frame(
+          Feature          = colnames(x_matrix),
+          N_Missing        = colSums(is.na(x_matrix)),
+          Method           = "None"
+        ),
+        parameters       = list(method = method, positive_only = positive_only,
+                                tune_sigma = tune_sigma, m = m, maxit = maxit,
+                                seed = seed),
+        method_used      = "None"
+      ))
+
+    } else if (method_lc == "quantileregression") {
 
       # -- QRILC --------------------------------------------------------------
       if (!requireNamespace("imputeLCMD", quietly = TRUE)) {
