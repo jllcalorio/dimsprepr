@@ -140,8 +140,8 @@ run_filtervariance <- function(
   # Calculate variance threshold at specified percentile
   var_threshold <- quantile(variances[valid_var_indices], percentile / 100, na.rm = TRUE)
   
-  # Keep features with variance > threshold OR invalid variance (to be safe)
-  features_to_keep <- (variances > var_threshold) | !valid_var_indices
+  # Keep features with variance > threshold AND ensure they have valid positive variance
+  features_to_keep <- (variances > var_threshold) & valid_var_indices
   
   x_filtered <- x_matrix[, features_to_keep, drop = FALSE]
   features_kept <- feature_names[features_to_keep]
