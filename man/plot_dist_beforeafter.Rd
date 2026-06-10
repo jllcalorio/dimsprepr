@@ -12,11 +12,12 @@ plot_dist_beforeafter(
   n_random = 30L,
   x_label = "Before",
   y_label = "After",
+  plot_title = NULL,
   x_fill = "#56B4E9",
   y_fill = "#E69F00",
   point_alpha = 0.6,
   theme = "nature",
-  base_size = 11,
+  base_size = 15,
   font_family = "sans",
   plot_cols = NULL,
   seed = 123,
@@ -46,7 +47,7 @@ Default is \code{"sample"}.}
 
 \item{n_random}{Integer or \code{NULL}. Maximum number of samples (when
 \code{group_by = "sample"}) or features (when \code{group_by =
-  "feature"}) to display in box plots. If \code{NULL} or if the data has
+"feature"}) to display in box plots. If \code{NULL} or if the data has
 fewer items than \code{n_random}, all are shown. Default is \code{30}.}
 
 \item{x_label}{Character. Label describing the before state, used in plot
@@ -54,6 +55,9 @@ titles. Default is \code{"Before"}.}
 
 \item{y_label}{Character. Label describing the after state, used in plot
 titles. Default is \code{"After"}.}
+
+\item{plot_title}{Character or \code{NULL}. Main title for the combined plot.
+If \code{NULL} (default), a title is automatically generated.}
 
 \item{x_fill}{Character. Fill color for before density and box plots.
 Default is \code{"#56B4E9"} (Okabe-Ito sky blue).}
@@ -69,7 +73,7 @@ and box fill. Default is \code{0.6}.}
 \code{"dark"}. Default is \code{"nature"}.}
 
 \item{base_size}{Numeric. Base font size for the theme (pts). Default is
-\code{11}.}
+\code{15}.}
 
 \item{font_family}{Character. Font family for all text elements. Default
 is \code{"sans"}.}

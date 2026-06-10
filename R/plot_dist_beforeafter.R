@@ -30,6 +30,8 @@
 #'   titles. Default is \code{"After"}.
 #' @param x_fill Character. Fill color for before density and box plots.
 #'   Default is \code{"#56B4E9"} (Okabe-Ito sky blue).
+#' @param plot_title Character or \code{NULL}. Main title for the combined plot.
+#'   If \code{NULL} (default), a title is automatically generated.
 #' @param y_fill Character. Fill color for after density and box plots.
 #'   Default is \code{"#E69F00"} (Okabe-Ito orange).
 #' @param point_alpha Numeric in \code{[0, 1]}. Transparency for density fill
@@ -38,7 +40,7 @@
 #'   \code{"minimal"}, \code{"classic"}, \code{"bw"}, \code{"light"},
 #'   \code{"dark"}. Default is \code{"nature"}.
 #' @param base_size Numeric. Base font size for the theme (pts). Default is
-#'   \code{11}.
+#'   \code{15}.
 #' @param font_family Character. Font family for all text elements. Default
 #'   is \code{"sans"}.
 #' @param plot_cols Integer or \code{NULL}. Number of columns in the combined
@@ -127,8 +129,8 @@
 #' @author John Lennon L. Calorio
 #'
 #' @importFrom ggplot2 ggplot aes geom_density geom_boxplot coord_flip labs
-#'   theme_bw theme_minimal theme_classic theme_light theme_dark theme
-#'   element_text element_blank element_line element_rect
+#' @importFrom ggplot2 theme_bw theme_minimal theme_classic theme_light theme_dark theme
+#' @importFrom ggplot2 element_text element_blank element_line element_rect
 #' @importFrom gridExtra arrangeGrob
 #' @importFrom grid grid.newpage grid.draw textGrob gpar
 #' 
@@ -143,11 +145,12 @@ plot_dist_beforeafter <- function(
     n_random         = 30L,
     x_label          = "Before",
     y_label          = "After",
+    plot_title       = NULL,
     x_fill           = "#56B4E9",
     y_fill           = "#E69F00",
     point_alpha      = 0.6,
     theme            = "nature",
-    base_size        = 11,
+    base_size        = 15,
     font_family      = "sans",
     plot_cols        = NULL,
     seed             = 123,
@@ -294,6 +297,11 @@ plot_dist_beforeafter <- function(
   if (!is.character(font_family) || length(font_family) != 1L) {
     stop("'font_family' must be a single character string.")
   }
+  if (!is.null(plot_title)) {
+    if (!is.character(plot_title) || length(plot_title) != 1L) {
+      stop("'plot_title' must be a single character string or NULL.")
+    }
+  }
   if (!is.character(x_fill) || length(x_fill) != 1L) {
     stop("'x_fill' must be a single character color string.")
   }
@@ -425,12 +433,10 @@ plot_dist_beforeafter <- function(
   sub_x <- long_x[long_x[[item_col]] %in% selected_items, , drop = FALSE]
   sub_y <- long_y[long_y[[item_col]] %in% selected_items, , drop = FALSE]
 
-  # Order items by median for readability
-  med_order_x <- names(sort(tapply(sub_x$value, sub_x[[item_col]], median, na.rm = TRUE)))
-  med_order_y <- names(sort(tapply(sub_y$value, sub_y[[item_col]], median, na.rm = TRUE)))
-
-  sub_x[[item_col]] <- factor(sub_x[[item_col]], levels = med_order_x)
-  sub_y[[item_col]] <- factor(sub_y[[item_col]], levels = med_order_y)
+  # Order items by median of 'before' data for consistency across panels
+  med_order <- names(sort(tapply(sub_x$value, sub_x[[item_col]], median, na.rm = TRUE)))
+  sub_x[[item_col]] <- factor(sub_x[[item_col]], levels = med_order)
+  sub_y[[item_col]] <- factor(sub_y[[item_col]], levels = med_order)
 
   box_title_before <- paste0(box_x_label, " Profiles — ", x_label,
                              " (n = ", n_shown, ")")
@@ -464,16 +470,35 @@ plot_dist_beforeafter <- function(
   # -------------------------------------------------------------------------
   # Assemble combined plot
   # -------------------------------------------------------------------------
-  main_title <- paste0(
-    "Distribution Comparison: ", x_label, " vs ", y_label,
-    " (", tools::toTitleCase(group_by), " Perspective)"
-  )
+  if (is.null(plot_title)) {
+    main_title <- paste0(
+      "Distribution Comparison: ", x_label, " vs ", y_label,
+      " (", tools::toTitleCase(group_by), " Perspective)"
+    )
+  } else {
+    main_title <- plot_title
+  }
 
   n_cols_out <- if (!is.null(plot_cols)) plot_cols else 2L
 
+  # Create versions with hidden labels for the combined plot to reduce redundancy
+  p_density_before_clean <- p_density_before +
+    ggplot2::theme(axis.title.x = ggplot2::element_blank(),
+                   axis.text.x  = ggplot2::element_blank())
+
+  p_density_after_clean <- p_density_after +
+    ggplot2::theme(axis.title.y = ggplot2::element_blank(),
+                   axis.text.y  = ggplot2::element_blank(),
+                   axis.title.x = ggplot2::element_blank(),
+                   axis.text.x  = ggplot2::element_blank())
+
+  p_box_after_clean <- p_box_after +
+    ggplot2::theme(axis.title.y = ggplot2::element_blank(),
+                   axis.text.y  = ggplot2::element_blank())
+
   combined_plot <- gridExtra::arrangeGrob(
-    p_density_before, p_density_after,
-    p_box_before,     p_box_after,
+    p_density_before_clean, p_density_after_clean,
+    p_box_before,           p_box_after_clean,
     ncol = n_cols_out,
     top  = grid::textGrob(
       main_title,
