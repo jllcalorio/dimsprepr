@@ -238,9 +238,10 @@ run_driftBatchCorrect <- function(
           
           tolerance <- .Machine$double.eps^0.5
           diff_matrix <- abs(x_before - x_matrix)
+          # Features are uncorrected if they are exactly the same or contain NAs where they shouldn't
           col_max_diffs <- matrixStats::colMaxs(diff_matrix, na.rm = TRUE)
           
-          uncorrected_indices <- (col_max_diffs <= tolerance)
+          uncorrected_indices <- (col_max_diffs <= tolerance) | is.na(col_max_diffs)
           uncorrected_features <- colnames(x_before)[uncorrected_indices]
           
           if (length(uncorrected_features) > 0) {
