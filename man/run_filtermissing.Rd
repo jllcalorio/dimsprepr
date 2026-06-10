@@ -9,6 +9,7 @@ run_filtermissing(
   metadata,
   threshold = 0.2,
   filter_by_group = TRUE,
+  any_group = TRUE,
   include_QC = FALSE,
   group_col = "Group",
   qc_types = c("QC", "SQC", "EQC"),
@@ -29,6 +30,11 @@ Features with missing proportion >= threshold are removed. Default: 0.2 (20\%).}
 
 \item{filter_by_group}{Logical. If TRUE, assess missingness within each group separately.
 A feature is kept if it passes the threshold in at least one group. Default: TRUE.}
+
+\item{any_group}{Logical. Only used when \code{filter_by_group = TRUE}. If \code{TRUE}
+(default), a feature is retained if its missingness is below the \code{threshold}
+in \strong{any} one group. This implements the "Modified 80\% Rule" (Yang et al., 2015).
+If \code{FALSE}, the feature must satisfy the threshold in \strong{all} groups.}
 
 \item{include_QC}{Logical. If TRUE, include QC samples in missingness calculation.
 Default: FALSE (QC samples are excluded from assessment).}
@@ -93,11 +99,17 @@ Two filtering modes are available:
 \item \strong{Global filtering} (\code{filter_by_group = FALSE}):
 Missingness is calculated across all eligible samples. Features with
 missing proportion greater than or equal to \code{threshold} are removed.
+When threshold = 0.20, essentially, you are implementing the procedure of
+Smilde et al. (2005), the \verb{80\% rule}, i.e., a variable will be kept if it
+has a non-zero value for at least 80\% of all samples.
 
 \item \strong{Group-wise filtering} (\code{filter_by_group = TRUE}):
-Missingness is calculated separately within each group. A feature is
-retained if it satisfies the threshold in at least one group. This approach
-is less stringent and helps preserve group-specific features.
+Missingness is calculated separately within each group. By default
+(\code{any_group = TRUE}), a feature is retained if it satisfies the
+threshold in at least one group. This implements the "Modified 80\% Rule"
+(Yang et al., 2015), which is less stringent and helps preserve
+group-specific features. Set \code{any_group = FALSE} to require that the
+threshold is met across all groups.
 }
 
 \strong{QC sample handling}
@@ -139,9 +151,17 @@ Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control, Batch Co
 Exploration & Data Cleaning (Version 2.1) Zendono. \doi{10.5281/zenodo.16824822}.
 Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
 
+Smilde, A. K., van der Werf, M. J., Bijlsma, S., van der Werff-van der Vat, B. J.,
+& Jellema, R. H. (2005). Fusion of mass spectrometry-based metabolomics data.
+Anal. Chem. 77, 6729–6736. \doi{10.1021/ac051080y}.
+
 Wei, R., Wang, J., Su, M., Jia, E., Chen, S., Chen, T., & Ni, Y. (2018).
 Missing Value Imputation Approach for Mass Spectrometry-based Metabolomics Data.
 Scientific Reports, 8(1), 663. \doi{10.1038/s41598-017-19120-0}
+
+Yang J, Zhao X, Lu X, Lin X and Xu G (2015) A data preprocessing strategy for
+metabolomics to reduce the mask effect in data analysis. Front. Mol. Biosci. 2:4.
+\doi{10.3389/fmolb.2015.00004}
 }
 \seealso{
 \code{\link{run_DIpreprocess}}
