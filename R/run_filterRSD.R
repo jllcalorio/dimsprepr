@@ -189,26 +189,28 @@ run_filterRSD <- function(
   # Use pmp for filtering if available
   if (requireNamespace("pmp", quietly = TRUE)) {
     
-    tryCatch({
-      
-      x_filtered <- pmp::filter_peaks_by_rsd(
+    res_filtered <- tryCatch({
+      filtered <- pmp::filter_peaks_by_rsd(
         t(x_matrix),  # pmp expects features in rows
         max_rsd = max_rsd * 100,  # pmp uses percentage (0-100)
         class = as.vector(classes),
         qc_label = qc_label
       )
-      
-      x_filtered <- t(x_filtered)
-      features_kept <- colnames(x_filtered)
-      
+      list(data = t(filtered), kept = colnames(filtered))
     }, error = function(e) {
       warning("pmp::filter_peaks_by_rsd failed: ", e$message,
               ". Using manual RSD filtering.")
-      
-      # Manual fallback
-      features_kept <<- feature_names[rsd_values < max_rsd | is.na(rsd_values)]
-      x_filtered <<- x_matrix[, features_kept, drop = FALSE]
+      list(data = NULL, kept = NULL)
     })
+
+    if (!is.null(res_filtered$data)) {
+      x_filtered <- res_filtered$data
+      features_kept <- res_filtered$kept
+    } else {
+      # Fallback to manual if tryCatch returned NULL on error
+      features_kept <- feature_names[rsd_values < max_rsd | is.na(rsd_values)]
+      x_filtered <- x_matrix[, features_kept, drop = FALSE]
+    }
     
   } else {
     # Manual filtering when pmp not available
