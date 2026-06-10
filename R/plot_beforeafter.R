@@ -19,10 +19,11 @@
 #' @param metadata A \code{data.frame} containing sample-level metadata shared
 #'   by both \code{x} and \code{y}. Must have the same number of rows as
 #'   \code{x} and \code{y}.
-#' @param plot_what Character vector or \code{NULL}. Column names from \code{x}
-#'   to be plotted. If \code{NULL} (default), the function will randomly select
-#'   up to 6 feature names from \code{x}. If \code{x} has fewer than 6 features,
-#'   all available features will be plotted. This argument is required.
+#' @param plot_what Character vector or \code{NULL}. Column names from \code{x} to be plotted.
+#'   If \code{NULL} (default), the function randomly selects up to 6 features.
+#'   If specific features are provided but not found, a warning is issued and they
+#'   are skipped. If none of the provided features are found, the function falls
+#'   back to random selection.
 #' @param col_injection Character. Name of the column in \code{metadata}
 #'   containing the injection sequence (numeric order of runs).
 #'   Default is \code{"InjectionSequence"}. If \code{run_DIpreprocess} class,
@@ -39,6 +40,12 @@
 #'   QC samples). Can be a vector like \code{c("SQC", "EQC")}. If \code{NULL},
 #'   no LOESS line is drawn. Default is \code{c("QC", "SQC", "EQC")}. If \code{run_DIpreprocess} class,
 #'   value is automatically taken from `$parameters$qc_types`.
+#' @param arrange_group Character vector or \code{NULL}. Custom order for the
+#'   sample groups in \code{col_group}. If \code{NULL} (default), groups are
+#'   arranged alphanumerically, with \code{col_qc_label} values placed first.
+#' @param plot_title Character or \code{NULL}. Main title for the combined plot.
+#'   If \code{NULL} (default), a title is automatically generated based on
+#'   \code{x_label}, \code{y_label}, and the number of batches.
 #' @param x_label Character. Label for the before-correction facet panel.
 #'   Default is \code{"Before"}.
 #' @param y_label Character. Label for the after-correction facet panel.
@@ -137,9 +144,9 @@
 #' @author John Lennon L. Calorio
 #'
 #' @importFrom ggplot2 ggplot aes geom_point geom_smooth facet_wrap
-#'   scale_color_manual scale_shape_manual labs theme_bw theme_minimal theme_classic theme_light
-#'   theme_dark theme element_text element_blank element_line element_rect
-#'   labeller
+#' @importFrom ggplot2 scale_color_manual scale_shape_manual labs theme_bw theme_minimal theme_classic theme_light
+#' @importFrom ggplot2 theme_dark theme element_text element_blank element_line element_rect
+#' @importFrom ggplot2 labeller
 #' @importFrom gridExtra arrangeGrob
 #' @importFrom grid grid.newpage grid.draw textGrob gpar
 #'
@@ -153,6 +160,8 @@ plot_beforeafter <- function(
     col_batch        = "Batch",
     col_group        = "Group",
     col_qc_label     = c("QC", "SQC", "EQC"),
+    arrange_group    = NULL,
+    plot_title       = NULL,
     x_label          = "Before",
     y_label          = "After",
     log_transform    = TRUE,
@@ -273,37 +282,44 @@ plot_beforeafter <- function(
   }
 
   # -------------------------------------------------------------------------
-  # Resolve plot_what (random selection if NULL)
+  # Validate and Resolve plot_what
   # -------------------------------------------------------------------------
+  if (!is.null(plot_what)) {
+    if (!is.character(plot_what) || length(plot_what) < 1L) {
+      stop("'plot_what' must be a non-empty character vector of feature names.")
+    }
+
+    missing_features <- setdiff(plot_what, x_cols)
+    if (length(missing_features) > 0L) {
+      if (length(missing_features) == length(plot_what)) {
+        warning(
+          "The following feature(s) in 'plot_what' were not found in 'x'/'y': ",
+          paste(missing_features, collapse = ", "), ". ",
+          "Falling back to random selection.",
+          call. = FALSE
+        )
+        plot_what <- NULL
+      } else {
+        warning(
+          "The following feature(s) in 'plot_what' were not found in 'x'/'y' and will be skipped: ",
+          paste(missing_features, collapse = ", "), ".",
+          call. = FALSE
+        )
+        plot_what <- intersect(plot_what, x_cols)
+      }
+    }
+  }
+
   if (is.null(plot_what)) {
-    if (length(x_cols) == 0L) {
-      stop("No features available in 'x' to plot.")
-    }
-    if (!is.null(seed)) {
-      set.seed(seed)
-    }
-    if (length(x_cols) <= 6) {
-      plot_what <- x_cols
-    } else {
-      plot_what <- sample(x_cols, 6)
-    }
+    if (length(x_cols) == 0L) stop("No features available in 'x' to plot.")
+    if (!is.null(seed)) set.seed(seed)
+
+    plot_what <- if (length(x_cols) <= 6) x_cols else sample(x_cols, 6)
+
     message(sprintf(
       "Automatically selected %d random features to plot: %s",
       length(plot_what), paste(plot_what, collapse = ", ")
     ))
-  } else if (!is.character(plot_what) || length(plot_what) < 1L) {
-    stop("'plot_what' must be a non-empty character vector of feature names.")
-  }
-
-  # -------------------------------------------------------------------------
-  # Input validation: plot_what (after resolution)
-  # -------------------------------------------------------------------------
-  missing_features <- setdiff(plot_what, x_cols)
-  if (length(missing_features) > 0L) {
-    stop(
-      "The following feature(s) in 'plot_what' were not found in 'x'/'y': ",
-      paste(missing_features, collapse = ", "), "."
-    )
   }
 
   # -------------------------------------------------------------------------
@@ -371,6 +387,18 @@ plot_beforeafter <- function(
         "metadata$", col_group, ". No LOESS trend line will be drawn."
       )
       col_qc_label <- NULL
+    }
+  }
+
+  if (!is.null(arrange_group)) {
+    if (!is.character(arrange_group)) {
+      stop("'arrange_group' must be a character vector.")
+    }
+  }
+
+  if (!is.null(plot_title)) {
+    if (!is.character(plot_title) || length(plot_title) != 1L) {
+      stop("'plot_title' must be a single character string or NULL.")
     }
   }
 
@@ -446,7 +474,18 @@ plot_beforeafter <- function(
   # -------------------------------------------------------------------------
   # Derive group palette dynamically (Okabe-Ito, colorblind-safe)
   # -------------------------------------------------------------------------
-  group_levels <- unique(as.character(metadata[[col_group]]))
+  if (is.null(arrange_group)) {
+    all_groups_present <- sort(unique(as.character(metadata[[col_group]])))
+    qc_p <- intersect(col_qc_label, all_groups_present)
+    other_p <- setdiff(all_groups_present, qc_p)
+    group_levels <- c(qc_p, other_p)
+  } else {
+    group_levels <- arrange_group
+  }
+
+  # Enforce factor levels in metadata for downstream plotting
+  metadata[[col_group]] <- factor(metadata[[col_group]], levels = group_levels)
+
   okabe_ito <- c(
     "#0072B2", "#D55E00", "#009E73", "#56B4E9",
     "#E69F00", "#CC79A7", "#F0E442", "#000000"
@@ -490,7 +529,7 @@ plot_beforeafter <- function(
   n_rows        <- nrow(x)
   injection_seq <- metadata[[col_injection]]
   # batch_vec moved above for palette derivation
-  group_vec     <- as.character(metadata[[col_group]])
+  group_vec     <- metadata[[col_group]]
   y_axis_label  <- if (log_transform) "log10(Value)" else "Value"
 
   panel_labels        <- c(x_label, y_label)
@@ -544,9 +583,10 @@ plot_beforeafter <- function(
       qc_data <- plot_data[plot_data$group %in% col_qc_label, , drop = FALSE]
       p <- p + ggplot2::geom_smooth(
         data      = qc_data,
-        formula   = y ~ x,
-        method    = "loess",
+        method    = NULL,
+        formula   = NULL,
         se        = TRUE,
+        na.rm     = TRUE,
         alpha     = 0.3,
         color     = "darkred",
         linetype  = "dashed",
@@ -585,10 +625,14 @@ plot_beforeafter <- function(
   # Main title and layout
   # -------------------------------------------------------------------------
   n_batches  <- length(unique(metadata[[col_batch]]))
-  main_title <- if (n_batches <= 1L) {
-    paste0("Features: ", x_label, " vs ", y_label, " (Single Batch)")
+  if (is.null(plot_title)) {
+    main_title <- if (n_batches <= 1L) {
+      paste0("Features: ", x_label, " vs ", y_label, " (Single Batch)")
+    } else {
+      paste0("Features: ", x_label, " vs ", y_label, " (", n_batches, " Batches)")
+    }
   } else {
-    paste0("Features: ", x_label, " vs ", y_label, " (", n_batches, " Batches)")
+    main_title <- plot_title
   }
 
   n_plots <- length(plot_list)

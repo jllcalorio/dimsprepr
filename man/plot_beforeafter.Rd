@@ -13,6 +13,8 @@ plot_beforeafter(
   col_batch = "Batch",
   col_group = "Group",
   col_qc_label = c("QC", "SQC", "EQC"),
+  arrange_group = NULL,
+  plot_title = NULL,
   x_label = "Before",
   y_label = "After",
   log_transform = TRUE,
@@ -44,10 +46,11 @@ and column names as \code{x}.}
 by both \code{x} and \code{y}. Must have the same number of rows as
 \code{x} and \code{y}.}
 
-\item{plot_what}{Character vector or \code{NULL}. Column names from \code{x}
-to be plotted. If \code{NULL} (default), the function will randomly select
-up to 6 feature names from \code{x}. If \code{x} has fewer than 6 features,
-all available features will be plotted. This argument is required.}
+\item{plot_what}{Character vector or \code{NULL}. Column names from \code{x} to be plotted.
+If \code{NULL} (default), the function randomly selects up to 6 features.
+If specific features are provided but not found, a warning is issued and they
+are skipped. If none of the provided features are found, the function falls
+back to random selection.}
 
 \item{col_injection}{Character. Name of the column in \code{metadata}
 containing the injection sequence (numeric order of runs).
@@ -68,6 +71,14 @@ that identifies the reference group for LOESS trend fitting (typically
 QC samples). Can be a vector like \code{c("SQC", "EQC")}. If \code{NULL},
 no LOESS line is drawn. Default is \code{c("QC", "SQC", "EQC")}. If \code{run_DIpreprocess} class,
 value is automatically taken from \verb{$parameters$qc_types}.}
+
+\item{arrange_group}{Character vector or \code{NULL}. Custom order for the
+sample groups in \code{col_group}. If \code{NULL} (default), groups are
+arranged alphanumerically, with \code{col_qc_label} values placed first.}
+
+\item{plot_title}{Character or \code{NULL}. Main title for the combined plot.
+If \code{NULL} (default), a title is automatically generated based on
+\code{x_label}, \code{y_label}, and the number of batches.}
 
 \item{x_label}{Character. Label for the before-correction facet panel.
 Default is \code{"Before"}.}
