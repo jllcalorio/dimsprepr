@@ -24,7 +24,7 @@ run_transform(
 \item \code{"sqrt"}: Square root transformation
 \item \code{"cbrt"}: Cube root transformation
 \item \code{"clr"}: Centered log-ratio transformation (computed per sample)
-\item \code{"arcsin_sqrt"}: Arcsine square root transformation (data must be in {[0, 1]} or
+\item \code{"arcsin_sqrt"}: Arcsine square root transformation (data must be in [0, 1] or
 proportion-scale after optional shift)
 \item \code{"vsn"}: Variance Stabilizing Normalization (requires 'vsn' package)
 \item \code{"glog"}: Generalized logarithm transformation (requires 'pmp' package)
