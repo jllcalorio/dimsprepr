@@ -167,7 +167,7 @@ preprocessing steps. If a tracked feature is removed, the step and reason
 \describe{
 \item{Single combination (scalar \code{normalize_method} and scalar
 \code{transform_method})}{A named list of class \code{run_DIpreprocess}
-— identical to the original behaviour.}
+- identical to the original behaviour.}
 \item{Multiple combinations (either argument is a vector of length > 1)}{A
 named list of class \code{run_DIpreprocess_multi}.  Each element is named
 \code{<normalize>_<transform>} (e.g. \code{sum_log10}) and is itself a
@@ -184,9 +184,9 @@ When \code{normalize_method} and/or \code{transform_method} are supplied as
 character vectors with more than one element, \strong{all combinations} are
 computed.  The steps prior to normalization (validation, outlier removal,
 missing-value filtering, imputation, and drift/batch correction) are executed
-\strong{only once}; the normalization → transformation → scaling → quality
-filtering → replicate-merging branch is then repeated for every
-normalization × transformation pair.  The return value in this case is a
+\strong{only once}; the normalization -> transformation -> scaling -> quality
+filtering -> replicate-merging branch is then repeated for every
+normalization x transformation pair.  The return value in this case is a
 plain \code{list} (class \code{"run_DIpreprocess_multi"}) whose elements are
 named \code{<normalize>_<transform>} and each hold a standard
 \code{run_DIpreprocess} object.

@@ -392,7 +392,7 @@ plot_dist_beforeafter <- function(
   p_density_before <- ggplot2::ggplot(long_x, ggplot2::aes(x = value)) +
     ggplot2::geom_density(fill = x_fill, color = x_fill, alpha = point_alpha) +
     ggplot2::labs(
-      title = paste("Distribution —", x_label),
+      title = paste("Distribution -", x_label),
       x     = "Value",
       y     = "Density"
     ) +
@@ -401,7 +401,7 @@ plot_dist_beforeafter <- function(
   p_density_after <- ggplot2::ggplot(long_y, ggplot2::aes(x = value)) +
     ggplot2::geom_density(fill = y_fill, color = y_fill, alpha = point_alpha) +
     ggplot2::labs(
-      title = paste("Distribution —", y_label),
+      title = paste("Distribution -", y_label),
       x     = "Value",
       y     = "Density"
     ) +
@@ -438,9 +438,9 @@ plot_dist_beforeafter <- function(
   sub_x[[item_col]] <- factor(sub_x[[item_col]], levels = med_order)
   sub_y[[item_col]] <- factor(sub_y[[item_col]], levels = med_order)
 
-  box_title_before <- paste0(box_x_label, " Profiles — ", x_label,
+  box_title_before <- paste0(box_x_label, " Profiles - ", x_label,
                              " (n = ", n_shown, ")")
-  box_title_after  <- paste0(box_x_label, " Profiles — ", y_label,
+  box_title_after  <- paste0(box_x_label, " Profiles - ", y_label,
                              " (n = ", n_shown, ")")
 
   p_box_before <- ggplot2::ggplot(

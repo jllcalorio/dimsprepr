@@ -9,9 +9,9 @@
 #' character vectors with more than one element, \strong{all combinations} are
 #' computed.  The steps prior to normalization (validation, outlier removal,
 #' missing-value filtering, imputation, and drift/batch correction) are executed
-#' \strong{only once}; the normalization → transformation → scaling → quality
-#' filtering → replicate-merging branch is then repeated for every
-#' normalization × transformation pair.  The return value in this case is a
+#' \strong{only once}; the normalization -> transformation -> scaling -> quality
+#' filtering -> replicate-merging branch is then repeated for every
+#' normalization x transformation pair.  The return value in this case is a
 #' plain \code{list} (class \code{"run_DIpreprocess_multi"}) whose elements are
 #' named \code{<normalize>_<transform>} and each hold a standard
 #' \code{run_DIpreprocess} object.
@@ -102,7 +102,7 @@
 #' \describe{
 #'   \item{Single combination (scalar \code{normalize_method} and scalar
 #'     \code{transform_method})}{A named list of class \code{run_DIpreprocess}
-#'     — identical to the original behaviour.}
+#'     - identical to the original behaviour.}
 #'   \item{Multiple combinations (either argument is a vector of length > 1)}{A
 #'     named list of class \code{run_DIpreprocess_multi}.  Each element is named
 #'     \code{<normalize>_<transform>} (e.g. \code{sum_log10}) and is itself a
@@ -204,7 +204,7 @@ run_DIpreprocess <- function(
     x,
     metadata,
 
-    # — Column names ——————————————————————————————————————————————————————————
+    # - Column names ----------------------------------------------------------
     sample_id_col    = "Sample",
     group_col        = "Group",
     qc_types         = c("QC", "SQC", "EQC"),
@@ -213,21 +213,21 @@ run_DIpreprocess <- function(
     norm_factor_col  = "Normalization",
     subject_id_col   = "SubjectID",
 
-    # — Outlier removal ———————————————————————————————————————————————————————
+    # - Outlier removal -------------------------------------------------------
     outliers         = NULL,
 
-    # — Missing-value filter ——————————————————————————————————————————————————
+    # - Missing-value filter --------------------------------------------------
     missing_threshold  = 0.2,
     missing_by_group   = TRUE,
     missing_any_group  = TRUE,
     missing_include_qc = FALSE,
 
-    # — Missing-value imputation ——————————————————————————————————————————————
+    # - Missing-value imputation ----------------------------------------------
     impute_method  = 0.2,
     impute_method_post_drift = NULL,
     positive_only    = TRUE,
 
-    # — Drift / batch correction ——————————————————————————————————————————————
+    # - Drift / batch correction ----------------------------------------------
     correct_drift        = TRUE,
     remove_uncorrected   = FALSE,
     spline_smooth        = 0,
@@ -235,26 +235,26 @@ run_DIpreprocess <- function(
     correct_on_log       = TRUE,
     min_qc_per_batch     = 5L,
 
-    # — Normalization —————————————————————————————————————————————————————————
+    # - Normalization ---------------------------------------------------------
     normalize_method     = "median",
     normalize_ref_sample = NULL,
     normalize_qc_method  = "none",
 
-    # — Transformation ————————————————————————————————————————————————————————
+    # - Transformation --------------------------------------------------------
     transform_method = "log10",
     vsn_cores        = 1L,
 
-    # — Scaling ———————————————————————————————————————————————————————————————
+    # - Scaling ---------------------------------------------------------------
     scale_nonpls     = "auto",
     scale_pls        = "pareto",
 
-    # — Quality filtering —————————————————————————————————————————————————————
+    # - Quality filtering -----------------------------------------------------
     rsd_threshold       = 0.3,
     rsd_qc_type         = "EQC",
     variance_percentile = 10,
     scale_filter_ref    = "auto",
 
-    # — Replicate merging —————————————————————————————————————————————————————
+    # - Replicate merging -----------------------------------------------------
     merge_replicates = FALSE,
     track            = NULL,
 
@@ -399,7 +399,7 @@ run_DIpreprocess <- function(
 
   if (is_multi) {
     msg(sprintf(
-      "Multi-method mode: %d combination(s) detected — %s.",
+      "Multi-method mode: %d combination(s) detected - %s.",
       nrow(combos), paste(combo_names, collapse = ", ")
     ))
     msg("Steps 1-5 (through drift correction) will run once; ",
@@ -579,7 +579,7 @@ run_DIpreprocess <- function(
     non_qc_rows <- !qc_rows
 
     # =========================================================================
-    # ZEROS → NA
+    # ZEROS -> NA
     # =========================================================================
 
     n_zeros <- sum(df == 0L, na.rm = TRUE)
@@ -901,7 +901,7 @@ run_DIpreprocess <- function(
           x         = df_norm,
           method    = trans_m,
           metadata  = metadata,
-          groups    = "Group_",   # already recoded: all QC types → "QC"
+          groups    = "Group_",   # already recoded: all QC types -> "QC"
           qc_types  = "QC",
           num_cores = vsn_cores,
           verbose   = FALSE
@@ -1034,7 +1034,7 @@ run_DIpreprocess <- function(
             "Consider relaxing 'rsd_threshold' or 'variance_percentile'.", combo_label
           ))
 
-        # Harmonisation tracking — only reachable when scale_filter_ref == "auto"
+        # Harmonisation tracking - only reachable when scale_filter_ref == "auto"
         if (!is.null(track)) {
           all_passed_either <- unique(c(colnames(filt_nonpls$final), colnames(filt_pls$final)))
           lost_harm <- setdiff(intersect(track, all_passed_either), features_final)
@@ -1194,9 +1194,9 @@ run_DIpreprocess <- function(
   if (!is_multi) {
 
     # ------------------------------------------------------------------
-    # Single combination — original return shape
+    # Single combination - original return shape
     # ------------------------------------------------------------------
-    msg("Step 6-10: Normalization → Transformation → Scaling → Filtering → Merge...")
+    msg("Step 6-10: Normalization -> Transformation -> Scaling -> Filtering -> Merge...")
 
     out <- .run_branch(normalize_method, transform_method, combo_names)
 
@@ -1247,7 +1247,7 @@ run_DIpreprocess <- function(
   } else {
 
     # ------------------------------------------------------------------
-    # Multiple combinations — named list of run_DIpreprocess objects
+    # Multiple combinations - named list of run_DIpreprocess objects
     # ------------------------------------------------------------------
     results <- vector("list", nrow(combos))
     names(results) <- combo_names
@@ -1284,14 +1284,14 @@ run_DIpreprocess <- function(
 
 
 # ==============================================================================
-# S3 METHODS — run_DIpreprocess  (single-combination; unchanged)
+# S3 METHODS - run_DIpreprocess  (single-combination; unchanged)
 # ==============================================================================
 
 #' @export
 print.run_DIpreprocess <- function(x, ...) {
   cat("=== run_DIpreprocess pipeline result ===\n")
   if (!is.null(x$error)) {
-    cat(sprintf("STATUS : FAILED — %s\n", x$error))
+    cat(sprintf("STATUS : FAILED - %s\n", x$error))
     return(invisible(x))
   }
   cat("STATUS : OK\n")
@@ -1312,7 +1312,7 @@ print.run_DIpreprocess <- function(x, ...) {
 
 #' @export
 summary.run_DIpreprocess <- function(object, ...) {
-  cat("=== run_DIpreprocess — step-by-step dimensions ===\n")
+  cat("=== run_DIpreprocess - step-by-step dimensions ===\n")
   print(object$dimensions, row.names = FALSE)
   if (!is.null(object$data_nonpls) && !is.null(object$data_pls)) {
     cat("\nFinal datasets:\n")
@@ -1333,7 +1333,7 @@ summary.run_DIpreprocess <- function(object, ...) {
 
 
 # ==============================================================================
-# S3 METHODS — run_DIpreprocess_multi  (new)
+# S3 METHODS - run_DIpreprocess_multi  (new)
 # ==============================================================================
 
 #' @export
@@ -1341,7 +1341,7 @@ print.run_DIpreprocess_multi <- function(x, ...) {
   cat("=== run_DIpreprocess_multi pipeline result ===\n")
 
   if (!is.null(x$error)) {
-    cat(sprintf("STATUS : FAILED — %s\n", x$error))
+    cat(sprintf("STATUS : FAILED - %s\n", x$error))
     return(invisible(x))
   }
 
@@ -1373,7 +1373,7 @@ print.run_DIpreprocess_multi <- function(x, ...) {
 
 #' @export
 summary.run_DIpreprocess_multi <- function(object, ...) {
-  cat("=== run_DIpreprocess_multi — per-combination summaries ===\n\n")
+  cat("=== run_DIpreprocess_multi - per-combination summaries ===\n\n")
   for (nm in names(object)) {
     cat(sprintf("--- %s ---\n", nm))
     summary(object[[nm]])
