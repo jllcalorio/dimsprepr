@@ -1,34 +1,40 @@
 Package: dimsprepr
-Title: dimsprepr: An R Package for End-to-End Preprocessing of
-    Direct-Injection Metabolomics Data
-Version: 1.0
+Title: End-to-End Preprocessing of Direct-Injection Metabolomics Data
+Version: 1.0.0
 Authors@R: 
     person("John Lennon", "Calorio", , "jllcalorio@gmail.com", role = c("aut", "cre"))
-Description: An R package for end-to-end preprocessing of direct-injection
-    metabolomics data — missing value filtering, imputation, signal drift
-    and batch correction, normalization, transformation, scaling, and
-    quality filtering — in a single reproducible pipeline.
+Description: A complete, reproducible preprocessing pipeline for
+    direct-injection mass spectrometry (DIMS) metabolomics data — missing
+    value filtering, imputation, signal drift and batch correction,
+    normalization, transformation, scaling, and quality filtering — in a
+    single reproducible pipeline.
 License: MIT + file LICENSE
-URL: https://jllcalorio.github.io/dimsprepr
+URL: https://jllcalorio.github.io/dimsprepr,
+    https://github.com/jllcalorio/dimsprepr
+BugReports: https://github.com/jllcalorio/dimsprepr/issues
 Depends:
     R (>= 4.1.0)
 Imports:
-    BiocParallel,
     ggplot2,
-    grDevices,
     grid,
     gridExtra,
-    imputeLCMD,
     matrixStats,
+    stats
+Suggests:
+    BiocParallel,
+    imputeLCMD,
+    knitr,
     mice,
     parallelly,
     pmp,
-    stats,
+    rmarkdown,
     sva,
-    tools,
+    testthat (>= 3.0.0),
     vsn
 VignetteBuilder: 
     knitr
+Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
+LazyData: true

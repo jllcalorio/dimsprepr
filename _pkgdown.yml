@@ -99,13 +99,6 @@ reference:
       - starts_with("plot_beforeafter")
       - starts_with("plot_dist_beforeafter")
 
-  - title: "Other Plotting Functions"
-    desc: "Other functions to plot metabolomics and metagenomics data."
-    contents:
-      - starts_with("plot_meanmap")
-      - starts_with("plot_multi_y")
-      - starts_with("plot_relabund")
-
   - title: "Internal functions"
     desc: >
       Internal functions used by dimsprepr.

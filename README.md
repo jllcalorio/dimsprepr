@@ -15,7 +15,7 @@ You can install the development version of `dimsprepr` directly from GitHub:
 install.packages("pak")
 
 # Install the GitHub package
-pak::pak("username/repository")
+pak::pak("jllcalorio/dimsprepr")
 
 ```
 ## Contributing

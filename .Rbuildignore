@@ -4,3 +4,11 @@
 ^doc$
 ^Meta$
 ^dev$
+^AGENTS\.md$
+^REVIEW\.md$
+^CODE_OF_CONDUCT\.md$
+^_pkgdown\.yml$
+^pkgdown$
+^\.github$
+^data-raw$
+^\.posit$
