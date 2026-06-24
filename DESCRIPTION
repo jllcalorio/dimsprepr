@@ -1,77 +1,32 @@
-Package: pondeR
-Title: pondeR: Making Statistical Analysis A Little Bit Easier
+Package: dimsprepr
+Title: dimsprepr: An R Package for End-to-End Preprocessing of
+    Direct-Injection Metabolomics Data
 Version: 1.0
 Authors@R: 
     person("John Lennon", "Calorio", , "jllcalorio@gmail.com", role = c("aut", "cre"))
-Description: Generate publication-ready statistical tables and figures
-    using minimal coding.
+Description: An R package for end-to-end preprocessing of direct-injection
+    metabolomics data — missing value filtering, imputation, signal drift
+    and batch correction, normalization, transformation, scaling, and
+    quality filtering — in a single reproducible pipeline.
 License: MIT + file LICENSE
-URL: https://jllcalorio.github.io/pondeR
+URL: https://jllcalorio.github.io/dimsprepr
 Depends:
     R (>= 4.1.0)
 Imports:
-    anthro,
-    anthroplus,
-    ape,
     BiocParallel,
-    car,
-    caret,
-    contentValidity,
-    dplyr,
-    effectsize,
-    forcats,
-    foreach,
-    ggdendro,
     ggplot2,
-    ggpubr,
-    ggrepel,
-    ggtext,
-    glmnet,
     grDevices,
     grid,
     gridExtra,
-    gt,
-    gtsummary,
-    htmlwidgets,
     imputeLCMD,
-    lme4,
-    lmerTest,
-    logistf,
-    magrittr,
-    MASS,
     matrixStats,
-    methods,
     mice,
-    mixOmics,
-    moments,
-    nortest,
-    OmicFlow,
-    openxlsx,
-    parallel,
     parallelly,
-    patchwork,
-    performance,
-    plotly,
     pmp,
-    polycor,
-    pROC,
-    purrr,
-    reshape2,
-    rlang,
-    ropls,
-    rstatix,
     stats,
     sva,
-    tibble,
     tools,
-    utils,
-    vegan,
-    viridis,
     vsn
-Suggests:
-    data.table,
-    knitr,
-    rmarkdown
 VignetteBuilder: 
     knitr
 Config/roxygen2/version: 8.0.0

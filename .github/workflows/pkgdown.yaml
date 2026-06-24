@@ -1,6 +1,6 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # pkgdown.yaml
-# Automatically builds and deploys the pondeR pkgdown site to GitHub Pages
+# Automatically builds and deploys the dimsprepr pkgdown site to GitHub Pages
 # once per month ONLY if there were commits in the previous 30 days.
 # Manual runs are still allowed from the Actions tab.
 # ──────────────────────────────────────────────────────────────────────────────

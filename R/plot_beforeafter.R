@@ -182,13 +182,14 @@ plot_beforeafter <- function(
   # -------------------------------------------------------------------------
   # Package availability
   # -------------------------------------------------------------------------
-  for (pkg in c("ggplot2", "gridExtra", "grid")) {
-    if (!requireNamespace(pkg, quietly = TRUE)) {
-      stop(
-        "Required package '", pkg, "' is not installed. ",
-        "Install it with: install.packages('", pkg, "')"
-      )
-    }
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package \"ggplot2\" needed for this function to work. Please install it.", call. = FALSE)
+  }
+  if (!requireNamespace("gridExtra", quietly = TRUE)) {
+    stop("Package \"gridExtra\" needed for this function to work. Please install it.", call. = FALSE)
+  }
+  if (!requireNamespace("grid", quietly = TRUE)) {
+    stop("Package \"grid\" needed for this function to work. Please install it.", call. = FALSE)
   }
 
   # --- Integration with run_DIpreprocess ---

@@ -2,7 +2,7 @@
 #'
 #' @description
 #' Runs a complete, sequential preprocessing pipeline for metabolomics data by
-#' orchestrating the individual \code{run_*} functions of \pkg{pondeR}. Steps
+#' orchestrating the individual \code{run_*} functions of \pkg{dimsprepr}. Steps
 #' execute in a fixed, reproducible order regardless of argument arrangement.
 #'
 #' When \code{normalize_method} and/or \code{transform_method} are supplied as

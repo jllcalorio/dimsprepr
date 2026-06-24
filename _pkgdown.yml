@@ -1,4 +1,4 @@
-url: https://jllcalorio.github.io/pondeR/
+url: https://jllcalorio.github.io/dimsprepr/
 
 template:
   bootstrap: 5
@@ -30,16 +30,18 @@ template:
 
 # ── Site metadata ────────────────────────────────────────────────────────────
 home:
-  title: "pondeR • Statistical Analysis Made Easier"
+  title: "dimsprepr • Statistical Analysis Made Easier"
   description: >
-    pondeR is an R package providing a curated collection of functions for
-    generating publication-ready descriptive and inferential statistics tables
-    and figures — with minimal coding overhead.
+    An R package for end-to-end preprocessing of 
+    direct-injection metabolomics data — missing value filtering, 
+    imputation, signal drift and batch correction, normalization, 
+    transformation, scaling, and quality filtering — 
+    in a single reproducible pipeline.
   links:
     - text: "Report a bug"
-      href: https://github.com/jllcalorio/pondeR/issues
+      href: https://github.com/jllcalorio/dimsprepr/issues
     - text: "Source on GitHub"
-      href: https://github.com/jllcalorio/pondeR
+      href: https://github.com/jllcalorio/dimsprepr
 
 # ── Navbar ───────────────────────────────────────────────────────────────────
 navbar:
@@ -50,11 +52,11 @@ navbar:
   components:
     intro:
       text: "Get Started"
-      href: articles/pondeR.html
+      href: articles/dimsprepr.html
 
     github:
       icon: fab fa-github
-      href: https://github.com/jllcalorio/pondeR
+      href: https://github.com/jllcalorio/dimsprepr
       aria-label: "GitHub"
 
 # ── Reference (function index) ───────────────────────────────────────────────
@@ -63,60 +65,9 @@ reference:
   - title: "Direct-Injection Metabolomics Preprocessing Pipeline"
     desc: >
       Function for running a sequential preprocessing pipeline for metabolomics data by
-      orchestrating the individual run_* functions of pondeR.
+      orchestrating the individual run_* functions of dimsprepr.
     contents:
       - starts_with("run_DIpreprocess")
-
-  - title: "Summarizing Data & Checking Distributions"
-    desc: >
-      Functions for generating publication-ready summary tables and
-      anthropometric indices according to WHO standards.
-    contents:
-      - starts_with("run_summarytable")
-      - starts_with("run_anthroindex")
-
-  - title: "Comparing Groups & Identifying Associations"
-    desc: >
-      Methods for detecting differences between cohorts, calculating
-      fold changes, testing statistical associations, and visualization.
-    contents:
-      - starts_with("run_diff")
-      - starts_with("plot_diff")
-      - starts_with("run_assoc")
-      - starts_with("run_single_assoc")
-      - starts_with("run_foldchange")
-      - starts_with("plot_volcano")
-      - starts_with("get_volcanodata")
-      - starts_with("run_correl")
-      - starts_with("plot_heatmap")
-      - starts_with("plot_dend")
-      - starts_with("run_lefse")
-
-  - title: "Predictive Modeling & Classification"
-    desc: >
-      Regularized regression (Ridge, LASSO, and Elastic Net),
-      Linear Mixed-Effect Model,
-      Logistic regression analysis and performance evaluation (AUC/AUROC).
-    contents:
-      - starts_with("run_regreg")
-      - starts_with("run_mixedmodel")
-      - starts_with("plot_mixedmodel")
-      - starts_with("run_logreg")
-      - starts_with("run_auc")
-      - starts_with("plot_oddsratio")
-
-
-  - title: "Multivariate Exploration and Discrimination"
-    desc: >
-      Dimensionality reduction and visualization tools for simplified
-      exploration of complex datasets.
-    contents:
-      - starts_with("run_pca")
-      - starts_with("run_pls")
-      - starts_with("run_pcoa")
-      - starts_with("plot_scree")
-      - starts_with("plot_score")
-      - starts_with("run_reduce")
 
   - title: "Data Cleaning & Quality Control"
     desc: "Filtering features based on missingness, variance, or RSD thresholds."
@@ -130,17 +81,17 @@ reference:
     contents:
       - starts_with("run_mvimpute")
 
+  - title: "Signal Drift and Batch Effects Correction"
+    desc: "Correcting for technical variation and instrument signal drift."
+    contents:
+      - starts_with("run_driftBatchCorrect")
+
   - title: "Data Normalization, Transformation, and Scaling"
     desc: "Transforming and scaling data to ensure comparability across samples."
     contents:
       - starts_with("run_normalize")
       - starts_with("run_transform")
       - starts_with("run_scale")
-
-  - title: "Signal Drift and Batch Effects Correction"
-    desc: "Correcting for technical variation and instrument signal drift."
-    contents:
-      - starts_with("run_driftBatchCorrect")
 
   - title: "Plotting Functions of Two Data Frames"
     desc: "Plots two data frames at a time, can be before and after implementing a method."
@@ -155,48 +106,9 @@ reference:
       - starts_with("plot_multi_y")
       - starts_with("plot_relabund")
 
-  - title: "Content validity"
-    desc: >
-      "Functions to assess/validate questionnaires 
-      using subject-matter expert (SME) ratings."
-    contents:
-      - starts_with("run_contentvalidity")
-      - starts_with("run_contentvaliditycvr")
-
-  - title: "Export Functions"
-    desc: "Functions export data frames to Excel/CSV files and figure to PNGs, etc."
-    contents:
-      - starts_with("save_excel")
-      - starts_with("save_plots")
-
-  - title: "Utilities & Helpers"
-    desc: >
-      Utility functions for data management, relabelling, and S3 methods.
-    contents:
-      - starts_with("run_relabel")
-      - starts_with("run_move_names")
-      - starts_with("run_randomize")
-      - starts_with("run_subset")
-      - starts_with("run_vector2df")
-      - starts_with("get_groupsizes")
-      - starts_with("get_removed_samples")
-      - starts_with("get_sigfeatures")
-      - starts_with("utils")
-      - starts_with("as_")
-      - starts_with("has_")
-      - starts_with("is_")
-      - starts_with("select_")
-
-  - title: "S3 methods"
-    desc: >
-      S3 methods used by pondeR.
-    contents:
-      - starts_with("print.")
-      - starts_with("summary.")
-
   - title: "Internal functions"
     desc: >
-      Internal functions used by pondeR.
+      Internal functions used by dimsprepr.
     contents:
       - has_keyword("internal")
 
@@ -205,7 +117,7 @@ articles:
   - title: "Introduction"
     navbar: "Introduction"
     contents:
-      - starts_with("pondeR")
+      - starts_with("dimsprepr")
       - starts_with("intro")
       - starts_with("getting-started")
 
@@ -213,7 +125,7 @@ articles:
 news:
   releases:
     - text: "Version 1.0"
-      href: https://github.com/jllcalorio/pondeR/releases/tag/v1.0
+      href: https://github.com/jllcalorio/dimsprepr/releases/tag/v1.0
 
 # ── Footer ───────────────────────────────────────────────────────────────────
 footer:
