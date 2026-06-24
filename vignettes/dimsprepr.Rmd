@@ -1,0 +1,136 @@
+---
+title: "Getting Started with dimsprepr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with dimsprepr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## Introduction
+
+**dimsprepr** provides a complete, reproducible preprocessing pipeline for
+direct-injection mass spectrometry (DIMS) metabolomics data.  It covers:
+missing-value filtering, imputation, signal-drift and batch correction,
+normalization, transformation, scaling, and quality filtering — all
+orchestrated through a single function call.
+
+## Quick Example
+
+```{r setup}
+library(dimsprepr)
+
+# Load the bundled example dataset
+data(dims_data)
+data(dims_metadata)
+
+dim(dims_data)
+table(dims_metadata$Group)
+```
+
+### Run the full pipeline
+
+The `run_DIpreprocess()` function executes all preprocessing steps in a
+fixed, validated order.  Here we skip drift correction (since this is a
+small simulated dataset without a realistic QC injection pattern):
+```{r pipeline}
+result <- run_DIpreprocess(
+  x                = dims_data,
+  metadata         = dims_metadata,
+  normalize_method = "median",
+  transform_method = "log10",
+  correct_drift    = FALSE,
+  rsd_threshold    = 0.5,
+  variance_percentile = 5,
+  verbose          = FALSE
+)
+
+result
+```
+
+The result is a named list with intermediate and final data matrices:
+
+```{r inspect}
+# Final preprocessed matrix (auto-scaled for general analysis)
+dim(result$data_nonpls)
+
+# Step-by-step dimension tracking
+result$dimensions
+```
+
+## Using Individual Functions
+
+Each preprocessing step is also available as a standalone function for
+maximum flexibility.
+
+### 1. Missing-Value Filtering
+
+```{r filtermissing}
+filt <- run_filtermissing(
+  dims_data,
+  dims_metadata,
+  threshold = 0.3,
+  verbose   = FALSE
+)
+filt
+```
+
+### 2. Imputation
+
+```{r impute}
+imp <- run_mvimpute(filt$data, method = 0.2, verbose = FALSE)
+imp
+```
+
+### 3. Normalization
+
+```{r normalize}
+norm <- run_normalize(imp$data, dims_metadata, method = "median", verbose = FALSE)
+```
+
+### 4. Transformation
+
+```{r transform}
+trans <- run_transform(norm$data, method = "log10", verbose = FALSE)
+```
+
+### 5. Scaling
+
+```{r scale}
+scaled <- run_scale(trans$data, method = "auto", verbose = FALSE)
+scaled
+```
+
+## Cartesian-Product Pipelines
+
+Supply vectors to `normalize_method` and/or `transform_method` to
+compute all combinations automatically.  Expensive upstream steps
+(filtering, imputation, drift correction) run only once:
+
+```{r multi, eval=FALSE}
+multi <- run_DIpreprocess(
+  x                = dims_data,
+  metadata         = dims_metadata,
+  normalize_method = c("sum", "median"),
+  transform_method = c("log10", "log2"),
+  correct_drift    = FALSE,
+  verbose          = FALSE
+)
+names(multi)
+# [1] "sum_log10"    "sum_log2"     "median_log10" "median_log2"
+```
+
+## Session Info
+
+```{r session}
+sessionInfo()
+```
