@@ -1,68 +1,26 @@
-# pondeR: Statistical Analysis Made Easier
+# dimsprepr: An R package for end-to-end preprocessing of direct-injection metabolomics data — missing value filtering, imputation, signal drift and batch correction, normalization, transformation, scaling, and quality filtering — in a single reproducible pipeline.
 
-`pondeR` is an R package providing a curated collection of functions for generating publication-ready descriptive and inferential statistics tables and figures — with minimal coding overhead. It is built upon the robust `gtsummary` framework and leverages the power of the `tidyverse`.
+`dimsprepr` provides a complete, reproducible preprocessing pipeline for direct-injection mass spectrometry (DIMS) metabolomics data. Built around a single orchestrating function, the package executes preprocessing steps — outlier removal, missing value filtering, imputation, signal drift and batch correction, normalization, transformation, scaling, and quality filtering — in a fixed, validated order, ensuring methodological consistency across studies.
 
-This package aims to make statistical analysis more accessible for everyone, ensuring transparency in analytical methods and providing a consistent template for results.
+A key feature is its support for Cartesian product pipelines: users may supply multiple normalization and transformation methods simultaneously, with computationally expensive upstream steps executed only once and shared across all method combinations. This enables systematic, side-by-side comparison of preprocessing strategies within a single function call.
 
-## Key Features
-
-`pondeR` offers a comprehensive suite of tools for various stages of data analysis, particularly focused on metabolomics data preprocessing and general statistical reporting:
-
-*   **Direct-Injection Metabolomics Preprocessing Pipeline**: Orchestrates a sequential preprocessing pipeline for metabolomics data by combining individual `pondeR` functions for filtering, imputation, batch correction, normalization, transformation, and scaling.
-*   **Summarizing Data & Checking Distributions**: Generate publication-ready summary tables, calculate anthropometric indices according to WHO standards, and test for normality or skewness.
-*   **Comparing Groups & Identifying Associations**: Provides methods for detecting differences between cohorts, calculating fold changes, and testing statistical associations. Includes plotting functions like volcano plots and heatmaps.
-*   **Predictive Modeling & Classification**: Offers tools for regularized regression (Ridge, LASSO, Elastic Net), Linear Mixed-Effect Models, and Logistic regression analysis with performance evaluation (AUC/AUROC) and automated bias correction options.
-*   **Multivariate Exploration and Discrimination**: Features dimensionality reduction and visualization tools (PCA, PLS, PCoA) for simplified exploration of complex datasets, including scree and score plots.
-*   **Data Cleaning & Quality Control**: Functions for filtering features based on missingness, variance, or RSD thresholds.
-*   **Missing Value Imputation**: Addresses missing data using various imputation algorithms.
-*   **Data Normalization, Transformation, and Scaling**: Transforms and scales data to ensure comparability across samples.
-*   **Signal Drift and Batch Effects Correction**: Corrects for technical variation and instrument signal drift.
-*   **Plotting Functions**: A variety of plotting utilities, including before-and-after comparisons, distribution plots, mean maps, and multi-Y plots for metabolomics and metagenomics data.
-*   **Export Functions**: Easily export data frames to Excel/CSV files and figures to PNGs.
-*   **Utilities & Helpers**: A collection of utility functions for data management, relabelling, randomization, and retrieving group sizes or significant features.
+`dimsprepr` is designed for metabolomics researchers who need a structured, auditable preprocessing workflow ready for downstream statistical analysis.
 
 ## Installation
 
-You can install the development version of `pondeR` directly from GitHub:
+You can install the development version of `dimsprepr` directly from GitHub:
 
 ```R
-# Install devtools if you haven't already
-if (!requireNamespace("devtools", quietly = TRUE)) {
-  install.packages("devtools")
-}
+# Install pak if you haven't already
+install.packages("pak")
 
-devtools::install_github("jllcalorio/pondeR")
+# Install the GitHub package
+pak::pak("username/repository")
+
 ```
-
-## Quick Start
-
-Here's a quick example of how to generate a descriptive summary table using `pondeR` (assuming you have a data frame named `my_data`):
-
-```R
-library(pondeR)
-library(dplyr) # Often useful with gtsummary-based packages
-
-# Example data (replace with your actual data)
-my_data <- tibble::tibble(
-  age = rnorm(100, 30, 5),
-  gender = sample(c("Male", "Female"), 100, replace = TRUE),
-  treatment = sample(c("A", "B", "C"), 100, replace = TRUE),
-  score = runif(100, 0, 100)
-)
-
-# Generate a summary table
-my_data %>%
-  run_summarytable(
-    # Specify variables and grouping if needed
-    include = c(age, gender, score),
-    by = treatment
-  )
-```
-*(Note: The exact arguments for `run_summarytable` may vary. Please refer to the package documentation for detailed usage.)*
-
 ## Contributing
 
-We welcome contributions to `pondeR`! Please review our Code of Conduct before contributing.
+We welcome contributions to `dimsprepr`! Please review our Code of Conduct before contributing.
 
 ## Reporting Bugs
 
@@ -74,8 +32,8 @@ This project is licensed under the MIT License.
 
 ## Acknowledgements
 
-Huge thanks to The R Project for Statistical Computing, Positron, RStudio, the developers of the gtsummary, dplyr, ggplot2, everything in the tidyverse package, and all the dependencies I fail to mention. Your work makes `pondeR` possible.
+Huge thanks to The R Project for Statistical Computing, Positron, RStudio, the developers of the dplyr, ggplot2, everything in the tidyverse package, pmp, sva, mice, and all the dependencies I fail to mention. Your work makes `dimsprepr` possible.
 
 ## Future Development
 
-More functions are continuously being added to `pondeR` to further enhance its capabilities and ease of use. Stay tuned for updates!
+More functions are continuously being added to `dimsprepr` to further enhance its capabilities and ease of use. Stay tuned for updates!
