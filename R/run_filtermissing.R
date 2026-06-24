@@ -29,7 +29,7 @@
 #'   values below detection limit rather than true zeros. Default: TRUE.
 #' @param verbose Logical. Print progress messages. Default: TRUE.
 #'
-#' @return A list containing:
+#' @return A list of class `"run_filtermissing"` containing:
 #'   \item{data}{Matrix or data frame of filtered data (same class as input `x`)}
 #'   \item{features_removed}{Character vector of removed feature names}
 #'   \item{features_kept}{Character vector of retained feature names}
@@ -71,16 +71,16 @@
 #'   \item \strong{Global filtering} (\code{filter_by_group = FALSE}):
 #'   Missingness is calculated across all eligible samples. Features with
 #'   missing proportion greater than or equal to \code{threshold} are removed.
-#'   When threshold = 0.20, essentially, you are implementing the procedure of 
-#'   Smilde et al. (2005), the `80% rule`, i.e., a variable will be kept if it 
+#'   When threshold = 0.20, essentially, you are implementing the procedure of
+#'   Smilde et al. (2005), the `80% rule`, i.e., a variable will be kept if it
 #'   has a non-zero value for at least 80% of all samples.
 #'
 #'   \item \strong{Group-wise filtering} (\code{filter_by_group = TRUE}):
-#'   Missingness is calculated separately within each group. By default 
-#'   (\code{any_group = TRUE}), a feature is retained if it satisfies the 
-#'   threshold in at least one group. This implements the "Modified 80% Rule" 
-#'   (Yang et al., 2015), which is less stringent and helps preserve 
-#'   group-specific features. Set \code{any_group = FALSE} to require that the 
+#'   Missingness is calculated separately within each group. By default
+#'   (\code{any_group = TRUE}), a feature is retained if it satisfies the
+#'   threshold in at least one group. This implements the "Modified 80% Rule"
+#'   (Yang et al., 2015), which is less stringent and helps preserve
+#'   group-specific features. Set \code{any_group = FALSE} to require that the
 #'   threshold is met across all groups.
 #' }
 #'
@@ -97,50 +97,38 @@
 #' Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control, Batch Correction,
 #' Exploration & Data Cleaning (Version 2.1) Zendono. \doi{10.5281/zenodo.16824822}.
 #' Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
-#' 
-#' Smilde, A. K., van der Werf, M. J., Bijlsma, S., van der Werff-van der Vat, B. J., 
-#' & Jellema, R. H. (2005). Fusion of mass spectrometry-based metabolomics data. 
-#' Anal. Chem. 77, 6729–6736. \doi{10.1021/ac051080y}.
-#' 
+#'
+#' Smilde, A. K., van der Werf, M. J., Bijlsma, S., van der Werff-van der Vat, B. J.,
+#' & Jellema, R. H. (2005). Fusion of mass spectrometry-based metabolomics data.
+#' Anal. Chem. 77, 6729-6736. \doi{10.1021/ac051080y}.
+#'
 #' Wei, R., Wang, J., Su, M., Jia, E., Chen, S., Chen, T., & Ni, Y. (2018).
 #' Missing Value Imputation Approach for Mass Spectrometry-based Metabolomics Data.
 #' Scientific Reports, 8(1), 663. \doi{10.1038/s41598-017-19120-0}
-#' 
-#' Yang J, Zhao X, Lu X, Lin X and Xu G (2015) A data preprocessing strategy for 
-#' metabolomics to reduce the mask effect in data analysis. Front. Mol. Biosci. 2:4. 
+#'
+#' Yang J, Zhao X, Lu X, Lin X and Xu G (2015) A data preprocessing strategy for
+#' metabolomics to reduce the mask effect in data analysis. Front. Mol. Biosci. 2:4.
 #' \doi{10.3389/fmolb.2015.00004}
 #'
-#' @importFrom matrixStats colMeans2
-#' 
 #' @seealso \code{\link{run_DIpreprocess}}
 #'
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Simulate data with zeros and NAs
-#' set.seed(123)
+#' \donttest{
+#' set.seed(302)
 #' x <- matrix(abs(rnorm(100 * 50, mean = 100)), nrow = 100, ncol = 50)
-#' x[sample(length(x), 300)] <- 0    # Add zeros
-#' x[sample(length(x), 200)] <- NA   # Add NAs
+#' x[sample(length(x), 300)] <- 0
+#' x[sample(length(x), 200)] <- NA
 #' colnames(x) <- paste0("Feature", 1:50)
-#' 
+#'
 #' metadata <- data.frame(
 #'   Sample = paste0("S", 1:100),
 #'   Group = rep(c("Control", "Treatment", "QC"), c(40, 40, 20))
 #' )
-#' 
-#' # Treat zeros as missing (default)
-#' result1 <- run_filtermissing(x, metadata, threshold = 0.3)
-#' 
-#' # Keep zeros as valid values
-#' result2 <- run_filtermissing(x, metadata, threshold = 0.3, 
-#'                               zero_as_missing = FALSE)
-#' 
-#' # Group-wise filtering with zeros as missing
-#' result3 <- run_filtermissing(x, metadata, threshold = 0.3, 
-#'                               filter_by_group = TRUE,
-#'                               zero_as_missing = TRUE)
+#'
+#' result <- run_filtermissing(x, metadata, threshold = 0.3)
+#' result
 #' }
 run_filtermissing <- function(
     x,
@@ -154,157 +142,132 @@ run_filtermissing <- function(
     zero_as_missing = TRUE,
     verbose = TRUE
 ) {
-  
-  msg <- function(...) if (verbose) message(...)
-  
-  # Input validation
-  if (!is.matrix(x) && !is.data.frame(x)) {
-    stop("'x' must be a matrix or data frame")
-  }
-  if (!is.data.frame(metadata)) {
-    stop("'metadata' must be a data frame")
-  }
-  if (nrow(x) != nrow(metadata)) {
-    stop("Number of rows in 'x' must equal number of rows in 'metadata'")
-  }
-  if (!is.numeric(threshold) || length(threshold) != 1 || threshold < 0 || threshold > 1) {
-    stop("'threshold' must be a numeric value between 0 and 1")
-  }
-  if (filter_by_group && !group_col %in% colnames(metadata)) {
-    stop(sprintf("'%s' column not found in metadata", group_col))
-  }
-  if (!is.logical(zero_as_missing) || length(zero_as_missing) != 1) {
-    stop("'zero_as_missing' must be a single logical value (TRUE or FALSE)")
-  }
-  
-  was_matrix <- is.matrix(x)
-  x_matrix <- as.matrix(x)
+
+  msg <- .msg(verbose)
+
+  .validate_data_matrix(x)
+  .validate_metadata(x, metadata)
+
+  if (!is.numeric(threshold) || length(threshold) != 1 || threshold < 0 || threshold > 1)
+    stop("'threshold' must be a numeric value between 0 and 1.", call. = FALSE)
+  if (filter_by_group) .require_col(metadata, group_col)
+  if (!is.logical(zero_as_missing) || length(zero_as_missing) != 1)
+    stop("'zero_as_missing' must be a single logical value.", call. = FALSE)
+
+  mp <- .as_matrix_preserve(x)
+  x_matrix <- mp$mat
   n_features_before <- ncol(x_matrix)
   feature_names <- colnames(x_matrix)
-  
+
   msg(sprintf("Starting missing value filtering (threshold: %.1f%%)...", threshold * 100))
-  
+
   # Convert zeros to NA if requested
-  n_zeros_converted <- 0
+  n_zeros_converted <- 0L
   if (zero_as_missing) {
     n_zeros_before <- sum(x_matrix == 0, na.rm = TRUE)
-    if (n_zeros_before > 0) {
+    if (n_zeros_before > 0L) {
       x_matrix[x_matrix == 0] <- NA
       n_zeros_converted <- n_zeros_before
       msg(sprintf("Converted %d zero values to NA (zero_as_missing = TRUE)", n_zeros_converted))
-    } else {
-      msg("No zero values found in data (zero_as_missing = TRUE)")
     }
-  } else {
-    msg("Zeros treated as valid values (zero_as_missing = FALSE)")
   }
-  
-  # Create Group_ column for QC identification
-  if (!include_QC && filter_by_group && group_col %in% colnames(metadata)) {
-    metadata$Group_ <- ifelse(metadata[[group_col]] %in% qc_types, "QC", metadata[[group_col]])
-  }
-  
+
   # Determine which samples to use for missingness calculation
   if (include_QC || !filter_by_group) {
     assessment_indices <- seq_len(nrow(x_matrix))
   } else {
-    qc_indices <- metadata[[group_col]] %in% qc_types
-    assessment_indices <- which(!qc_indices)
+    assessment_indices <- which(!metadata[[group_col]] %in% qc_types)
   }
-  
-  if (length(assessment_indices) == 0) {
-    stop("No samples available for missingness assessment after QC exclusion")
-  }
-  
+
+  if (length(assessment_indices) == 0L)
+    stop("No samples available for missingness assessment after QC exclusion.", call. = FALSE)
+
   # Calculate missingness
   if (filter_by_group) {
     groups <- unique(metadata[[group_col]][assessment_indices])
-    
+
     missing_by_group <- sapply(groups, function(g) {
-      group_indices <- which(metadata[[group_col]] == g & seq_len(nrow(metadata)) %in% assessment_indices)
+      group_indices <- which(metadata[[group_col]] == g &
+                               seq_len(nrow(metadata)) %in% assessment_indices)
       if (length(group_indices) == 0) return(rep(0, ncol(x_matrix)))
       colMeans(is.na(x_matrix[group_indices, , drop = FALSE]))
     })
-    
+
     if (is.vector(missing_by_group)) {
       features_to_keep <- missing_by_group < threshold
     } else {
-      if (any_group) {
-        # Modified 80% rule (Yang et al., 2015): keep if any group passes
-        features_to_keep <- apply(missing_by_group, 1, function(x) any(x < threshold))
+      # Vectorized: check threshold across groups
+      below_thresh <- missing_by_group < threshold
+      features_to_keep <- if (any_group) {
+        rowSums(below_thresh) > 0L
       } else {
-        # Strict rule: keep only if ALL groups pass
-        features_to_keep <- apply(missing_by_group, 1, function(x) all(x < threshold))
+        rowSums(below_thresh) == ncol(below_thresh)
       }
     }
-    
+
     missingness_summary <- as.data.frame(missing_by_group)
     missingness_summary$Feature <- feature_names
     missingness_summary$Kept <- features_to_keep
-    
+
   } else {
     missing_overall <- colMeans(is.na(x_matrix[assessment_indices, , drop = FALSE]))
     features_to_keep <- missing_overall < threshold
-    
+
     missingness_summary <- data.frame(
       Feature = feature_names,
       Missingness = missing_overall,
       Kept = features_to_keep
     )
   }
-  
-  # Apply filter
+
   x_filtered <- x_matrix[, features_to_keep, drop = FALSE]
   n_features_after <- ncol(x_filtered)
   n_removed <- n_features_before - n_features_after
-  
+
   msg(sprintf("Removed %d features (%.1f%%) with missingness >= %.1f%%",
               n_removed, (n_removed / n_features_before) * 100, threshold * 100))
-  
-  # Return in original class
-  if (!was_matrix) {
-    x_filtered <- as.data.frame(x_filtered)
-  }
-  
-  result <- list(
-    data = x_filtered,
-    features_removed = feature_names[!features_to_keep],
-    features_kept = feature_names[features_to_keep],
-    n_features_before = n_features_before,
-    n_features_after = n_features_after,
-    n_features_removed = n_removed,
-    n_zeros_converted = n_zeros_converted,
-    parameters = list(
-      threshold = threshold,
-      filter_by_group = filter_by_group,
-      any_group = any_group,
-      include_QC = include_QC,
-      group_col = group_col,
-      qc_types = qc_types,
-      zero_as_missing = zero_as_missing
+
+  structure(
+    list(
+      data                = .restore_class(x_filtered, mp$was_matrix),
+      features_removed    = feature_names[!features_to_keep],
+      features_kept       = feature_names[features_to_keep],
+      n_features_before   = n_features_before,
+      n_features_after    = n_features_after,
+      n_features_removed  = n_removed,
+      n_zeros_converted   = n_zeros_converted,
+      parameters = list(
+        threshold       = threshold,
+        filter_by_group = filter_by_group,
+        any_group       = any_group,
+        include_QC      = include_QC,
+        group_col       = group_col,
+        qc_types        = qc_types,
+        zero_as_missing = zero_as_missing
+      ),
+      missingness_summary = missingness_summary
     ),
-    missingness_summary = missingness_summary
+    class = "run_filtermissing"
   )
-  
-  return(result)
 }
 
 
-# Updated S3 print method
+#' @param x Object to print.
+#' @param ... Ignored.
+#' @rdname run_filtermissing
 #' @export
 print.run_filtermissing <- function(x, ...) {
   cat("=== Missing Value Filtering Results ===\n")
   cat(sprintf("Features before: %d\n", x$n_features_before))
   cat(sprintf("Features after:  %d\n", x$n_features_after))
-  cat(sprintf("Features removed: %d (%.1f%%)\n", 
-              x$n_features_removed, 
+  cat(sprintf("Features removed: %d (%.1f%%)\n",
+              x$n_features_removed,
               (x$n_features_removed / x$n_features_before) * 100))
   cat(sprintf("Threshold: %.1f%%\n", x$parameters$threshold * 100))
-  if (x$parameters$filter_by_group) {
-    cat(sprintf("Mode: %s group(s) must pass\n", if (x$parameters$any_group) "Any" else "All"))
-  }
-  if (x$parameters$zero_as_missing && x$n_zeros_converted > 0) {
+  if (x$parameters$filter_by_group)
+    cat(sprintf("Mode: %s group(s) must pass\n",
+                if (x$parameters$any_group) "Any" else "All"))
+  if (x$parameters$zero_as_missing && x$n_zeros_converted > 0)
     cat(sprintf("Zeros converted to NA: %d\n", x$n_zeros_converted))
-  }
   invisible(x)
 }

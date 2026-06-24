@@ -2,6 +2,7 @@
 % Please edit documentation in R/run_normalize.R
 \name{run_normalize}
 \alias{run_normalize}
+\alias{print.run_normalize}
 \title{Normalize Metabolomics Data}
 \usage{
 run_normalize(
@@ -12,145 +13,91 @@ run_normalize(
   ref_sample = NULL,
   group_sample = "QC",
   qc_normalize = "median",
-  groups = "Group",
+  group_col = "Group",
   qc_types = c("QC", "SQC", "EQC"),
   reference_method = "mean",
   sample_id_col = "Sample",
   verbose = TRUE
 )
+
+\method{print}{run_normalize}(x, ...)
 }
 \arguments{
-\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.}
+\item{x}{Object to print.}
 
-\item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).
-May contain normalization factors, group labels, and QC sample identifiers.}
+\item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).}
 
-\item{method}{Character or numeric vector. Normalization method to apply. Options:
+\item{method}{Character or numeric vector. Normalization method:
 \itemize{
 \item \code{"sum"}: Total sum normalization
 \item \code{"median"}: Median normalization
-\item \code{"specific_factor"}: Use values from a metadata column (specify via \code{factor_col})
-\item \code{"pqn_global"}: Probabilistic Quotient Normalization using global median
-\item \code{"pqn_reference"}: PQN using a specific reference sample (specify via \code{ref_sample})
+\item \code{"specific_factor"}: Use values from a metadata column
+\item \code{"pqn_global"}: PQN using global median
+\item \code{"pqn_reference"}: PQN using a specific reference sample
 \item \code{"pqn_group"}: PQN using pooled QC samples as reference
-\item \code{"pqn"}: Probabilistic Quotient Normalization
-\item \code{"col_rel_abundance"}: Relative abundance per column (feature); each value
-divided by its column sum so each feature sums to 1 across all samples
-\item \code{"row_rel_abundance"}: Relative abundance per row (sample); each value
-divided by its row sum so each sample sums to 1 across all features
-\item Numeric vector: Custom normalization factors (length must equal nrow(x) excluding QCs)
+\item \code{"pqn"}: PQN via the pmp package (requires \pkg{pmp})
+\item \code{"quantile"}: Alias for \code{"pqn"} (PQN via pmp)
+\item \code{"col_rel_abundance"}: Relative abundance per column (feature)
+\item \code{"row_rel_abundance"}: Relative abundance per row (sample)
+\item Numeric vector: Custom normalization factors
 }}
 
-\item{factor_col}{Character. Name of column in \code{metadata} containing normalization
-factors when \code{method = "specific_factor"}. Default: "Normalization".}
+\item{factor_col}{Character. Metadata column with normalization factors.
+Default: "Normalization".}
 
-\item{ref_sample}{Character. Sample name to use as reference for \code{method = "pqn_reference"}.
-Must match a value in the sample identifier column of metadata. Default: NULL.}
+\item{ref_sample}{Character. Reference sample for PQN. Default: NULL.}
 
-\item{group_sample}{Character. Group label for \code{method = "pqn_group"}. Uses samples
-with this group label as reference. Default: "QC".}
+\item{group_sample}{Character. Group label for PQN group reference.
+Default: "QC".}
 
-\item{qc_normalize}{Character. How to normalize QC samples when using specific factors.
-Options: "mean", "median", "none". Default: "median".}
+\item{qc_normalize}{Character. QC normalization strategy: "mean", "median", "none".
+Default: "median".}
 
-\item{groups}{Character. Name of column in \code{metadata} containing group labels.
-Required for PQN and QC identification. Default: "Group".}
+\item{group_col}{Character. Column with group labels. Default: "Group".}
 
-\item{qc_types}{Character vector. Group labels identifying QC samples. Default: c("QC", "SQC", "EQC").}
+\item{qc_types}{Character vector. QC group labels. Default: c("QC", "SQC", "EQC").}
 
-\item{reference_method}{Character. Method for computing reference in quantile normalization.
-Options: "mean", "median". Default: "mean".}
+\item{reference_method}{Character. Reference method for PQN via pmp: "mean" or "median".
+Default: "mean".}
 
-\item{sample_id_col}{Character. Name of column in \code{metadata} containing sample identifiers
-for matching \code{ref_sample}. Default: "Sample".}
+\item{sample_id_col}{Character. Column with sample identifiers. Default: "Sample".}
 
-\item{verbose}{Logical. Print progress messages. Default: TRUE.}
+\item{verbose}{Logical. Print progress. Default: TRUE.}
+
+\item{...}{Ignored.}
 }
 \value{
-A list containing:
-\item{data}{Matrix or data frame of normalized data (same class as input \code{x})}
-\item{normalization_factors}{Numeric vector of factors used for normalization}
-\item{method_used}{Character describing normalization method applied}
-\item{parameters}{List of parameters used}
+A list of class \code{"run_normalize"} containing:
+\item{data}{Normalized data (same class as input \code{x})}
+\item{normalization_factors}{Numeric vector of factors used}
+\item{method_used}{Character describing method}
+\item{parameters}{List of parameters}
 }
 \description{
 Applies various normalization methods to account for dilution effects and
 sample-to-sample variation in metabolomics data.
 }
 \details{
-\strong{Normalization Methods:}
-\itemize{
-\item \strong{sum}: Divides each sample by its total sum. Assumes similar total metabolite
-abundance across samples.
-\item \strong{median}: Divides each sample by its median value. More robust to outliers than sum.
-\item \strong{specific_factor}: Uses externally measured factors (e.g., osmolality for urine,
-protein concentration for plasma) from a metadata column. QC samples are normalized
-separately using mean/median of biological sample factors.
-\item \strong{pqn_global}: Probabilistic Quotient Normalization using the global median spectrum
-as reference. Robust method that accounts for dilution effects.
-\item \strong{pqn_reference}: PQN using a specific reference sample. Useful when one sample
-represents the "ideal" composition.
-\item \strong{pqn_group}: PQN using pooled QC samples as reference. Recommended for
-metabolomics data with regular QC injections.
-\item \strong{quantile}: Forces all samples to have identical distributions. Very strong
-normalization that may remove biological variation - use with caution.
-\item \strong{col_rel_abundance}: Computes relative abundance per feature (column). Each value
-is divided by the sum of its column, so each feature's values sum to 1 across all
-samples. Useful for comparing the contribution of a feature across samples. Note
-that the normalization factors returned are the column sums.
-\item \strong{row_rel_abundance}: Computes relative abundance per sample (row). Each value is
-divided by the sum of its row, so each sample's values sum to 1 across all features.
-Equivalent to \code{"sum"} normalization but expressed as proportions. Useful for
-compositional data analysis. Note that the normalization factors returned are the
-row sums.
-}
-
-\strong{Custom Normalization Factors:}
-
-You can provide a numeric vector as \code{method} with custom normalization factors.
-The vector length must equal the number of biological samples (excluding QCs).
-QC samples will be normalized using the mean or median of these factors.
+See the package documentation for full descriptions of each method.
+\code{"pqn"} and \code{"quantile"} both call \code{pmp::pqn_normalisation()}.
 }
 \examples{
-\dontrun{
-# Simulate data
-set.seed(123)
-x <- matrix(abs(rnorm(100 * 50, mean = 100, sd = 20)),
-            nrow = 100, ncol = 50)
-colnames(x) <- paste0("Feature", 1:50)
-
-metadata <- data.frame(
-  Sample = paste0("S", 1:100),
-  Group = rep(c("Control", "Treatment", "QC"), c(40, 40, 20)),
-  Normalization = runif(100, 0.8, 1.2)
+\donttest{
+set.seed(215)
+x <- matrix(abs(rnorm(80 * 40, mean = 100, sd = 20)), nrow = 80, ncol = 40)
+colnames(x) <- paste0("Feature", 1:40)
+meta <- data.frame(
+  Sample = paste0("S", 1:80),
+  Group = rep(c("Control", "Treatment", "QC"), c(30, 30, 20))
 )
 
-# Sum normalization
-result1 <- run_normalize(x, metadata, method = "sum")
-
-# PQN with QC reference
-result2 <- run_normalize(x, metadata, method = "pqn_group")
-
-# Specific factors from metadata
-result3 <- run_normalize(x, metadata, method = "specific_factor",
-                         factor_col = "Normalization")
-
-# Relative abundance per feature (column)
-result4 <- run_normalize(x, metadata, method = "col_rel_abundance")
-
-# Relative abundance per sample (row)
-result5 <- run_normalize(x, metadata, method = "row_rel_abundance")
+result <- run_normalize(x, meta, method = "median")
+result
 }
 }
 \references{
-Dieterle, F., Ross, A., Schlotterbeck, G., & Senn, H. (2006).
-Probabilistic Quotient Normalization as Robust Method to Account for Dilution
-of Complex Biological Mixtures. Analytical Chemistry, 78(13), 4281-4290.
+Dieterle, F., et al. (2006). Analytical Chemistry, 78(13), 4281-4290.
 \doi{10.1021/ac051632c}
-
-Jankevics A, Lloyd GR, Weber RJM (2025). pmp: Peak Matrix Processing and signal
-batch correction for metabolomics datasets. \doi{10.18129/B9.bioc.pmp},
-R package version 1.20.0, \url{https://bioconductor.org/packages/pmp}.
 }
 \seealso{
 \code{\link{run_DIpreprocess}}

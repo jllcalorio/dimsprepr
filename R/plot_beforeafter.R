@@ -179,19 +179,6 @@ plot_beforeafter <- function(
     ylab_size        = NULL
 ) {
 
-  # -------------------------------------------------------------------------
-  # Package availability
-  # -------------------------------------------------------------------------
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package \"ggplot2\" needed for this function to work. Please install it.", call. = FALSE)
-  }
-  if (!requireNamespace("gridExtra", quietly = TRUE)) {
-    stop("Package \"gridExtra\" needed for this function to work. Please install it.", call. = FALSE)
-  }
-  if (!requireNamespace("grid", quietly = TRUE)) {
-    stop("Package \"grid\" needed for this function to work. Please install it.", call. = FALSE)
-  }
-
   # --- Integration with run_DIpreprocess ---
   if (inherits(x, "run_DIpreprocess")) {
     obj_ref <- x
@@ -313,9 +300,10 @@ plot_beforeafter <- function(
 
   if (is.null(plot_what)) {
     if (length(x_cols) == 0L) stop("No features available in 'x' to plot.")
-    if (!is.null(seed)) set.seed(seed)
 
-    plot_what <- if (length(x_cols) <= 6) x_cols else sample(x_cols, 6)
+    plot_what <- .with_seed(seed, {
+      if (length(x_cols) <= 6) x_cols else sample(x_cols, 6)
+    })
 
     message(sprintf(
       "Automatically selected %d random features to plot: %s",
@@ -326,13 +314,6 @@ plot_beforeafter <- function(
   # -------------------------------------------------------------------------
   # Input validation: scalar numerics
   # -------------------------------------------------------------------------
-  .check_positive_numeric <- function(val, name, allow_null = FALSE) {
-    if (allow_null && is.null(val)) return(invisible(NULL))
-    if (!is.numeric(val) || length(val) != 1L || is.na(val) || val <= 0) {
-      stop("'", name, "' must be a single positive number.")
-    }
-  }
-
   .check_positive_numeric(point_size,       "point_size")
   .check_positive_numeric(point_alpha,      "point_alpha")
   .check_positive_numeric(base_size,        "base_size")
@@ -407,26 +388,16 @@ plot_beforeafter <- function(
     warning("'x' and 'y' are identical. No transformation may have been applied.")
   }
 
-  # -------------------------------------------------------------------------
-  # Seed
-  # -------------------------------------------------------------------------
+  # Seed validation (actual seeding done via .with_seed where needed)
   if (!is.null(seed)) {
-    if (!is.numeric(seed) || length(seed) != 1L || is.na(seed)) {
+    if (!is.numeric(seed) || length(seed) != 1L || is.na(seed))
       stop("'seed' must be a single numeric value or NULL.")
-    }
-    set.seed(seed)
   }
 
   # -------------------------------------------------------------------------
   # Font size resolution
   # Priority: explicit arg > global_font_size scale > base_size-derived default
   # -------------------------------------------------------------------------
-  .resolve_size <- function(explicit, scale_factor, base_default) {
-    if (!is.null(explicit))      return(explicit)
-    if (!is.null(scale_factor))  return(base_default * scale_factor)
-    base_default
-  }
-
   gfs_factor      <- if (!is.null(global_font_size)) global_font_size / 11 else NULL
   r_title_size    <- .resolve_size(title_size,    gfs_factor, base_size + 1)
   r_subtitle_size <- .resolve_size(subtitle_size, gfs_factor, base_size + 2)

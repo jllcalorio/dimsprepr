@@ -133,6 +133,7 @@
 #' @importFrom ggplot2 element_text element_blank element_line element_rect
 #' @importFrom gridExtra arrangeGrob
 #' @importFrom grid grid.newpage grid.draw textGrob gpar
+#' @importFrom stats median
 #' 
 #' @seealso \code{\link{run_DIpreprocess}}
 #'
@@ -161,26 +162,8 @@ plot_dist_beforeafter <- function(
     ylab_size        = NULL
 ) {
 
-  # -------------------------------------------------------------------------
-  # Package availability
-  # -------------------------------------------------------------------------
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package \"ggplot2\" needed for this function to work. Please install it.", call. = FALSE)
-  }
-  if (!requireNamespace("gridExtra", quietly = TRUE)) {
-    stop("Package \"gridExtra\" needed for this function to work. Please install it.", call. = FALSE)
-  }
-  if (!requireNamespace("grid", quietly = TRUE)) {
-    stop("Package \"grid\" needed for this function to work. Please install it.", call. = FALSE)
-  }
-
   # --- Integration with run_DIpreprocess ---
   if (inherits(x, "run_DIpreprocess")) {
-    # if (missing(metadata) || is.null(metadata)) {
-    #   # Must use unmerged metadata because data_imputed is unmerged
-    #   metadata <- x$metadata
-    # }
-    
     # Extract states
     data_before <- x$data_imputed
     data_after  <- x$data_nonpls
@@ -250,13 +233,6 @@ plot_dist_beforeafter <- function(
   # -------------------------------------------------------------------------
   # Input validation: scalars and theme
   # -------------------------------------------------------------------------
-  .check_positive_numeric <- function(val, name, allow_null = FALSE) {
-    if (allow_null && is.null(val)) return(invisible(NULL))
-    if (!is.numeric(val) || length(val) != 1L || is.na(val) || val <= 0) {
-      stop("'", name, "' must be a single positive number.")
-    }
-  }
-
   .check_positive_numeric(point_alpha,      "point_alpha")
   .check_positive_numeric(base_size,        "base_size")
   .check_positive_numeric(global_font_size, "global_font_size", allow_null = TRUE)
@@ -318,19 +294,8 @@ plot_dist_beforeafter <- function(
   # Seed
   # -------------------------------------------------------------------------
   if (!is.null(seed)) {
-    if (!is.numeric(seed) || length(seed) != 1L || is.na(seed)) {
+    if (!is.numeric(seed) || length(seed) != 1L || is.na(seed))
       stop("'seed' must be a single numeric value or NULL.")
-    }
-    set.seed(seed)
-  }
-
-  # -------------------------------------------------------------------------
-  # Font size resolution
-  # -------------------------------------------------------------------------
-  .resolve_size <- function(explicit, scale_factor, base_default) {
-    if (!is.null(explicit))     return(explicit)
-    if (!is.null(scale_factor)) return(base_default * scale_factor)
-    base_default
   }
 
   gfs_factor      <- if (!is.null(global_font_size)) global_font_size / 11 else NULL
@@ -424,7 +389,7 @@ plot_dist_beforeafter <- function(
 
   n_items <- length(all_items)
   if (!is.null(n_random) && n_random < n_items) {
-    selected_items <- sample(all_items, n_random)
+    selected_items <- .with_seed(seed, sample(all_items, n_random))
     n_shown        <- n_random
   } else {
     selected_items <- all_items
@@ -474,7 +439,7 @@ plot_dist_beforeafter <- function(
   if (is.null(plot_title)) {
     main_title <- paste0(
       "Distribution Comparison: ", x_label, " vs ", y_label,
-      " (", tools::toTitleCase(group_by), " Perspective)"
+      " (", paste0(toupper(substring(group_by, 1, 1)), substring(group_by, 2)), " Perspective)"
     )
   } else {
     main_title <- plot_title

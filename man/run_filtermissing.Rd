@@ -2,6 +2,7 @@
 % Please edit documentation in R/run_filtermissing.R
 \name{run_filtermissing}
 \alias{run_filtermissing}
+\alias{print.run_filtermissing}
 \title{Filter Features by Missing Value Threshold}
 \usage{
 run_filtermissing(
@@ -16,11 +17,11 @@ run_filtermissing(
   zero_as_missing = TRUE,
   verbose = TRUE
 )
+
+\method{print}{run_filtermissing}(x, ...)
 }
 \arguments{
-\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
-Missing values should be represented as NA. Zero values can optionally be treated
-as missing via the \code{zero_as_missing} parameter.}
+\item{x}{Object to print.}
 
 \item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).
 Must contain a column specified by \code{group_col} when \code{filter_by_group = TRUE}.}
@@ -50,9 +51,11 @@ applying the filter. This is common in metabolomics where zeros often represent
 values below detection limit rather than true zeros. Default: TRUE.}
 
 \item{verbose}{Logical. Print progress messages. Default: TRUE.}
+
+\item{...}{Ignored.}
 }
 \value{
-A list containing:
+A list of class \code{"run_filtermissing"} containing:
 \item{data}{Matrix or data frame of filtered data (same class as input \code{x})}
 \item{features_removed}{Character vector of removed feature names}
 \item{features_kept}{Character vector of retained feature names}
@@ -120,12 +123,11 @@ recommended because QC samples often exhibit different missingness
 patterns compared with biological samples.
 }
 \examples{
-\dontrun{
-# Simulate data with zeros and NAs
-set.seed(123)
+\donttest{
+set.seed(302)
 x <- matrix(abs(rnorm(100 * 50, mean = 100)), nrow = 100, ncol = 50)
-x[sample(length(x), 300)] <- 0    # Add zeros
-x[sample(length(x), 200)] <- NA   # Add NAs
+x[sample(length(x), 300)] <- 0
+x[sample(length(x), 200)] <- NA
 colnames(x) <- paste0("Feature", 1:50)
 
 metadata <- data.frame(
@@ -133,17 +135,8 @@ metadata <- data.frame(
   Group = rep(c("Control", "Treatment", "QC"), c(40, 40, 20))
 )
 
-# Treat zeros as missing (default)
-result1 <- run_filtermissing(x, metadata, threshold = 0.3)
-
-# Keep zeros as valid values
-result2 <- run_filtermissing(x, metadata, threshold = 0.3, 
-                              zero_as_missing = FALSE)
-
-# Group-wise filtering with zeros as missing
-result3 <- run_filtermissing(x, metadata, threshold = 0.3, 
-                              filter_by_group = TRUE,
-                              zero_as_missing = TRUE)
+result <- run_filtermissing(x, metadata, threshold = 0.3)
+result
 }
 }
 \references{
@@ -153,7 +146,7 @@ Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
 
 Smilde, A. K., van der Werf, M. J., Bijlsma, S., van der Werff-van der Vat, B. J.,
 & Jellema, R. H. (2005). Fusion of mass spectrometry-based metabolomics data.
-Anal. Chem. 77, 6729–6736. \doi{10.1021/ac051080y}.
+Anal. Chem. 77, 6729-6736. \doi{10.1021/ac051080y}.
 
 Wei, R., Wang, J., Su, M., Jia, E., Chen, S., Chen, T., & Ni, Y. (2018).
 Missing Value Imputation Approach for Mass Spectrometry-based Metabolomics Data.

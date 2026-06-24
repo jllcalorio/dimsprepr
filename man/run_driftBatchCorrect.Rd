@@ -2,6 +2,7 @@
 % Please edit documentation in R/run_driftBatchCorrect.R
 \name{run_driftBatchCorrect}
 \alias{run_driftBatchCorrect}
+\alias{print.run_driftBatchCorrect}
 \title{Correct Signal Drift and Batch Effects Using QC Samples}
 \usage{
 run_driftBatchCorrect(
@@ -9,9 +10,9 @@ run_driftBatchCorrect(
   metadata,
   perform_correction = TRUE,
   batch_corr_only = FALSE,
-  injection_sequence = "InjectionSequence",
-  batch_numbers = "Batches",
-  groups = "Group",
+  injection_col = "InjectionSequence",
+  batch_col = "Batch",
+  group_col = "Group",
   qc_label = "QC",
   qc_types = c("QC", "SQC", "EQC"),
   spline_smooth_param = 0,
@@ -22,149 +23,94 @@ run_driftBatchCorrect(
   display_plots = FALSE,
   verbose = TRUE
 )
+
+\method{print}{run_driftBatchCorrect}(x, ...)
 }
 \arguments{
-\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.}
+\item{x}{Object to print.}
 
-\item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).
-Must contain columns specified by \code{injection_sequence}, \code{batch_numbers}, and \code{groups}.}
+\item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).}
 
 \item{perform_correction}{Logical. If TRUE, perform correction; if FALSE, return
 original data unchanged. Default: TRUE.}
 
-\item{batch_corr_only}{Logical. If TRUE, perform only batch correction using ComBat
-(no drift correction). If FALSE, perform QCRSC (drift + batch correction). Default: FALSE.}
+\item{batch_corr_only}{Logical. If TRUE, perform only ComBat batch correction
+(no drift correction). If FALSE, perform QCRSC. Default: FALSE.}
 
-\item{injection_sequence}{Character. Name of column in \code{metadata} containing injection
-order. Required for QCRSC. Default: "InjectionSequence".}
+\item{injection_col}{Character. Column in \code{metadata} containing injection order.
+Default: "InjectionSequence".}
 
-\item{batch_numbers}{Character. Name of column in \code{metadata} containing batch numbers.
-Required for both QCRSC and ComBat. Default: "Batches".}
+\item{batch_col}{Character. Column in \code{metadata} containing batch numbers.
+Default: "Batch".}
 
-\item{groups}{Character. Name of column in \code{metadata} containing sample group labels
-(e.g., "Sample", "QC", "SQC", "EQC"). Required for QCRSC. Default: "Group".}
+\item{group_col}{Character. Column in \code{metadata} containing sample group labels.
+Default: "Group".}
 
 \item{qc_label}{Character. Group label identifying QC samples for QCRSC. Default: "QC".}
 
-\item{qc_types}{Character vector. Group labels that should be converted to \code{qc_label}
-internally. Default: c("QC", "SQC", "EQC").}
+\item{qc_types}{Character vector. Group labels converted to \code{qc_label} internally.
+Default: c("QC", "SQC", "EQC").}
 
-\item{spline_smooth_param}{Numeric. Smoothing parameter for spline fitting in QCRSC
-(0 = more flexible, 1 = more rigid). Default: 0.}
+\item{spline_smooth_param}{Numeric. Smoothing parameter (0-1). Default: 0.}
 
-\item{min_QC}{Integer. Minimum number of QC samples required per batch for QCRSC.
-Batches with fewer QCs will not be corrected. Default: 5.}
+\item{min_QC}{Integer. Minimum QC samples per batch. Default: 5.}
 
-\item{spar_limit}{Numeric vector of length 2. Limits for spline fitting in QCRSC
-as c(min, max). Default: c(-1.5, 1.5).}
+\item{spar_limit}{Numeric vector of length 2. Spline limits. Default: c(-1.5, 1.5).}
 
-\item{log_scale}{Logical. If TRUE, fit QCRSC spline on log-transformed data. Default: TRUE.}
+\item{log_scale}{Logical. Fit on log-transformed data. Default: TRUE.}
 
-\item{use_parametric}{Logical. For ComBat only. Use parametric adjustment for batch
-effects. Default: TRUE.}
+\item{use_parametric}{Logical. Parametric ComBat adjustment. Default: TRUE.}
 
-\item{display_plots}{Logical. For ComBat only. Display diagnostic plots during correction.
-Default: FALSE.}
+\item{display_plots}{Logical. Diagnostic plots for ComBat. Default: FALSE.}
 
-\item{verbose}{Logical. Print progress messages. Default: TRUE.}
+\item{verbose}{Logical. Print progress. Default: TRUE.}
+
+\item{...}{Ignored.}
 }
 \value{
-A list containing:
-\item{data}{Matrix or data frame of corrected data (same class as input \code{x})}
+A list of class \code{"run_driftBatchCorrect"} containing:
+\item{data}{Corrected data (same class as input \code{x})}
 \item{data_before_correction}{Original data before correction}
-\item{correction_applied}{Logical indicating if correction was performed}
-\item{method_used}{Character describing correction method ("QCRSC" or "ComBat")}
-\item{uncorrected_features}{Character vector of features that could not be corrected}
-\item{n_uncorrected}{Integer. Number of uncorrected features}
-\item{parameters}{List of parameters used}
+\item{correction_applied}{Logical}
+\item{method_used}{Character}
+\item{uncorrected_features}{Character vector of uncorrected features}
+\item{n_uncorrected}{Integer}
+\item{parameters}{List of parameters}
 }
 \description{
 Applies Quality Control-based Robust Spline Correction (QCRSC) or batch correction
 using ComBat to remove systematic signal drift and batch effects in metabolomics data.
 }
 \details{
-\strong{QCRSC (Quality Control-based Robust Spline Correction):}
+\strong{QCRSC} fits smoothing splines through QC intensities across injection order.
+Requires \pkg{pmp}.
 
-QCRSC is the default and recommended method for metabolomics data with regular
-QC injections. It works by:
-\enumerate{
-\item Fitting a smoothing spline through QC sample intensities across injection order
-\item Using this spline to model systematic drift and batch effects
-\item Normalizing all samples (biological + QC) to remove the fitted drift
-}
-
-\strong{When to use QCRSC:}
-\itemize{
-\item Long analytical runs with visible signal drift
-\item Multiple batches with sufficient QC samples (≥ \code{min_QC} per batch)
-\item QC samples show systematic trends across injection order
-}
-
-\strong{ComBat Batch Correction:}
-
-When \code{batch_corr_only = TRUE}, uses the ComBat algorithm for batch effect removal
-only (no drift correction). This is useful when:
-\itemize{
-\item QC samples are insufficient or absent
-\item Primary concern is batch differences, not within-batch drift
-\item Data comes from multiple platforms or sites
-}
-
-ComBat uses empirical Bayes methods to adjust for batch effects while preserving
-biological variation.
-
-\strong{Uncorrected Features:}
-
-Some features may remain uncorrected due to:
-\itemize{
-\item Insufficient QC samples (< \code{min_QC}) in one or more batches
-\item Poor spline fit or numerical issues
-\item All QC values identical (no variance to model)
-}
-
-Uncorrected features are returned unchanged with their names listed in the output.
+\strong{ComBat} uses empirical Bayes for batch correction. Requires \pkg{sva}.
 }
 \examples{
-\dontrun{
-# Simulate data with drift and batch effects
-set.seed(123)
-n_samples <- 120
-n_features <- 50
-x <- matrix(rnorm(n_samples * n_features, mean = 100, sd = 20),
-            nrow = n_samples, ncol = n_features)
-colnames(x) <- paste0("Feature", 1:n_features)
+\donttest{
+set.seed(417)
+n <- 60; p <- 30
+x <- matrix(abs(rnorm(n * p, 100, 20)), nrow = n, ncol = p)
+colnames(x) <- paste0("F", seq_len(p))
 
-# Add systematic drift
-drift <- seq(0, 30, length.out = n_samples)
-x <- x + drift
-
-metadata <- data.frame(
-  Sample = paste0("S", 1:n_samples),
-  InjectionSequence = 1:n_samples,
-  Batches = rep(1:3, each = 40),
-  Group = rep(c(rep("Sample", 9), "QC"), n_samples / 10)
+meta <- data.frame(
+  InjectionSequence = seq_len(n),
+  Batch = rep(1:2, each = 30),
+  Group = rep(c(rep("Sample", 9), "QC"), 6)
 )
 
-# Apply QCRSC correction
-result1 <- run_driftBatchCorrect(x, metadata)
-
-# Apply ComBat correction only
-result2 <- run_driftBatchCorrect(x, metadata, batch_corr_only = TRUE)
+# Skip correction (returns unchanged)
+result <- run_driftBatchCorrect(x, meta, perform_correction = FALSE)
+result
 }
 }
 \references{
-Kirwan, J.A., Broadhurst, D.I., Davidson, R.L. et al. (2013).
-Characterising and correcting batch variation in an automated direct infusion
-mass spectrometry (DIMS) metabolomics workflow.
-Analytical and Bioanalytical Chemistry, 405, 5147-5157. \doi{10.1007/s00216-013-6856-7}
+Kirwan, J.A., et al. (2013). Analytical and Bioanalytical Chemistry, 405, 5147-5157.
+\doi{10.1007/s00216-013-6856-7}
 
-Johnson, W.E., Li, C., & Rabinovic, A. (2007). Adjusting batch effects in microarray
-expression data using empirical Bayes methods. Biostatistics, 8(1), 118-127.
+Johnson, W.E., et al. (2007). Biostatistics, 8(1), 118-127.
 \doi{10.1093/biostatistics/kxj037}
-
-Jankevics A, Lloyd GR, Weber RJM (2025). pmp: Peak Matrix Processing and signal
-batch correction for metabolomics datasets. \doi{10.18129/B9.bioc.pmp},
-R package version 1.20.0, \url{https://bioconductor.org/packages/pmp}.
 }
 \seealso{
 \code{\link{run_DIpreprocess}}

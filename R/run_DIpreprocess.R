@@ -147,6 +147,9 @@
 #' Kirwan, J.A., et al. (2013). \emph{Analytical and Bioanalytical Chemistry}, 405, 5147-5157.
 #'
 #' @importFrom matrixStats colMaxs
+#' @importFrom stats sd var
+#' @importFrom utils head
+#' 
 #' @export
 #'
 #' @examples
@@ -262,7 +265,7 @@ run_DIpreprocess <- function(
 ) {
 
   t_start <- proc.time()[["elapsed"]]
-  msg <- function(...) if (verbose) message(...)
+  msg <- .msg(verbose)
 
   # ===========================================================================
   # INTERNAL HELPERS
@@ -439,9 +442,6 @@ run_DIpreprocess <- function(
     if (!is.numeric(missing_threshold) || length(missing_threshold) != 1L ||
         missing_threshold < 0 || missing_threshold > 1)
       stop("'missing_threshold' must be a single numeric value in [0, 1].")
-    # if (!is.numeric(impute_method) || length(impute_method) != 1L ||
-    #     impute_method <= 0)
-    #   stop("'impute_method' must be a single positive numeric value.")
     .is_valid_impute <- function(m) {
       (is.numeric(m) && length(m) == 1L && m > 0) ||
       (is.character(m) && length(m) == 1L)
@@ -698,9 +698,9 @@ run_DIpreprocess <- function(
         metadata            = metadata,
         perform_correction  = TRUE,
         batch_corr_only     = FALSE,
-        injection_sequence  = injection_col,
-        batch_numbers       = batch_col,
-        groups              = group_col,
+        injection_col       = injection_col,
+        batch_col           = batch_col,
+        group_col           = group_col,
         qc_label            = "QC",
         qc_types            = qc_types,
         spline_smooth_param = spline_smooth,
@@ -880,7 +880,7 @@ run_DIpreprocess <- function(
           factor_col     = norm_factor_col,
           ref_sample     = normalize_ref_sample,
           qc_normalize   = normalize_qc_method,
-          groups         = "Group_",
+          group_col      = "Group_",
           qc_types       = "QC",   # meta_snap$Group_ is already recoded to "QC"
           sample_id_col  = "Sample",
           verbose        = FALSE
@@ -901,7 +901,7 @@ run_DIpreprocess <- function(
           x         = df_norm,
           method    = trans_m,
           metadata  = metadata,
-          groups    = "Group_",   # already recoded: all QC types -> "QC"
+          group_col = "Group_",   # already recoded: all QC types -> "QC"
           qc_types  = "QC",
           num_cores = vsn_cores,
           verbose   = FALSE
@@ -943,9 +943,9 @@ run_DIpreprocess <- function(
           x        = data,
           metadata = metadata,
           max_rsd  = rsd_threshold,
-          groups   = "Group_",
-          qc_type  = "QC",
-          qc_types = "QC",
+          group_col = "Group_",
+          qc_type   = "QC",
+          qc_types  = "QC",
           verbose  = FALSE
         )
 
@@ -1081,17 +1081,9 @@ run_DIpreprocess <- function(
           ))
       }
 
-      if (!is.null(track)) {
-        # Features that passed individual branch filters but failed intersection
-        all_passed_either <- unique(c(colnames(filt_nonpls$final), colnames(filt_pls$final)))
-        lost_harm <- setdiff(intersect(track, all_passed_either), features_final)
-        for (f in lost_harm) {
-          branch_out$track <- rbind(branch_out$track, data.frame(
-            Feature = f, Step = "Harmonisation", Value = "Removed in other branch",
-            stringsAsFactors = FALSE
-          ))
-        }
-      }
+      # ponytail: harmonisation tracking only applies when both branches exist
+      # (scale_filter_ref == "auto"); the per-branch tracking inside the "auto"
+      # block already handles its own case.
 
       msg(sprintf("  [%s] Final feature set: %d feature(s).", combo_label, length(features_final)))
 

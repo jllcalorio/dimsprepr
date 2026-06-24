@@ -2,28 +2,31 @@
 % Please edit documentation in R/run_filterRSD.R
 \name{run_filterRSD}
 \alias{run_filterRSD}
+\alias{print.run_filterRSD}
 \title{Filter Features by Relative Standard Deviation in QC Samples}
 \usage{
 run_filterRSD(
   x,
   metadata,
   max_rsd = 0.3,
-  groups = "Group",
+  group_col = "Group",
   qc_type = "EQC",
   qc_types = c("QC", "SQC", "EQC"),
   verbose = TRUE
 )
+
+\method{print}{run_filterRSD}(x, ...)
 }
 \arguments{
-\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.}
+\item{x}{Object to print.}
 
 \item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).
-Must contain column specified by \code{groups} to identify QC samples.}
+Must contain column specified by \code{group_col} to identify QC samples.}
 
 \item{max_rsd}{Numeric. Maximum allowed RSD (0-1). Features with RSD >= this
 threshold in QC samples are removed. Default: 0.3 (30\%).}
 
-\item{groups}{Character. Name of column in \code{metadata} containing sample group labels.
+\item{group_col}{Character. Name of column in \code{metadata} containing sample group labels.
 Default: "Group".}
 
 \item{qc_type}{Character. QC sample type to use for RSD calculation. Options:
@@ -38,9 +41,11 @@ Default: "EQC".}
 Default: c("QC", "SQC", "EQC").}
 
 \item{verbose}{Logical. Print progress messages. Default: TRUE.}
+
+\item{...}{Ignored.}
 }
 \value{
-A list containing:
+A list of class \code{"run_filterRSD"} containing:
 \item{data}{Matrix or data frame of filtered data (same class as input \code{x})}
 \item{features_removed}{Character vector of removed feature names}
 \item{features_kept}{Character vector of retained feature names}
@@ -58,10 +63,10 @@ poor analytical reproducibility.
 \details{
 \strong{Relative Standard Deviation (RSD):}
 
-RSD is calculated as: RSD = (SD / Mean) × 100\%
+RSD is calculated as: RSD = SD / Mean
 
 Also known as coefficient of variation (CV), RSD expresses variability
-as a percentage of the mean, making it scale-independent and suitable
+as a proportion of the mean, making it scale-independent and suitable
 for comparing features with different magnitudes.
 
 \strong{Why Filter by RSD:}
@@ -75,19 +80,6 @@ the same biological matrix. High RSD in QC samples indicates:
 \item Features near detection limit
 }
 
-Features with high QC RSD are unreliable and should be removed before
-biological interpretation.
-
-\strong{Choosing QC Type:}
-\itemize{
-\item \strong{EQC} (default): Most commonly used. Represents diluted pooled samples
-analyzed regularly throughout the run.
-\item \strong{SQC}: Undiluted pooled samples. Use when you have a specific SQC type
-distinct from EQC.
-\item \strong{QC}: Use when you don't distinguish between QC types, or want to
-assess RSD across all QC samples combined.
-}
-
 \strong{Typical RSD Thresholds:}
 \itemize{
 \item Stringent: 20\% (0.2) - high-quality data only
@@ -96,24 +88,20 @@ assess RSD across all QC samples combined.
 }
 }
 \examples{
-\dontrun{
-# Simulate data
-set.seed(123)
+\donttest{
+set.seed(814)
 x <- matrix(abs(rnorm(100 * 50, mean = 100, sd = 20)),
             nrow = 100, ncol = 50)
 colnames(x) <- paste0("Feature", 1:50)
 
-# Add high variability to some features in QC samples
-qc_rows <- 91:100
-x[qc_rows, 1:10] <- x[qc_rows, 1:10] * runif(10 * 10, 0.5, 1.5)
-
 metadata <- data.frame(
   Sample = paste0("S", 1:100),
-  Group = c(rep("Control", 40), rep("Treatment", 40), rep("QC", 10), rep("EQC", 10))
+  Group = c(rep("Control", 40), rep("Treatment", 40),
+            rep("QC", 10), rep("EQC", 10))
 )
 
-# Filter by RSD in EQC samples
 result <- run_filterRSD(x, metadata, max_rsd = 0.3, qc_type = "EQC")
+result
 }
 }
 \references{

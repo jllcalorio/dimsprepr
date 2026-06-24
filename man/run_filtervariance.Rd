@@ -2,21 +2,26 @@
 % Please edit documentation in R/run_filtervariance.R
 \name{run_filtervariance}
 \alias{run_filtervariance}
+\alias{print.run_filtervariance}
 \title{Filter Features by Low Variance}
 \usage{
 run_filtervariance(x, percentile = 10, verbose = TRUE)
+
+\method{print}{run_filtervariance}(x, ...)
 }
 \arguments{
-\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.}
+\item{x}{Object to print.}
 
 \item{percentile}{Numeric. Percentile threshold (0-100) for variance filtering.
 Features in the bottom X percentile of variance are removed. For example,
 10 removes the 10\% of features with lowest variance. Default: 10.}
 
 \item{verbose}{Logical. Print progress messages. Default: TRUE.}
+
+\item{...}{Ignored.}
 }
 \value{
-A list containing:
+A list of class \code{"run_filtervariance"} containing:
 \item{data}{Matrix or data frame of filtered data (same class as input \code{x})}
 \item{features_removed}{Character vector of removed feature names}
 \item{features_kept}{Character vector of retained feature names}
@@ -49,44 +54,16 @@ Features with very low variance across samples:
 \item \strong{Moderate} (10-20\%): Standard approach for most studies
 \item \strong{Aggressive} (20-30\%): When high dimensionality is a concern
 }
-
-The default (10\%) removes the bottom 10\% of features by variance, which
-is a commonly used threshold in metabolomics.
-
-\strong{Important Notes:}
-\enumerate{
-\item Variance filtering should be applied \strong{after} normalization and
-transformation, as these steps affect feature variance.
-\item The variance calculation uses all samples (including QCs if present).
-Consider removing QC samples before variance filtering if they have
-artificially low variance.
-\item For scaled data (auto or Pareto), this filter identifies features with
-inherently low biological variation across the study groups.
-\item Very high percentiles (>30\%) risk removing biologically relevant features
-with naturally stable expression levels.
-}
 }
 \examples{
-\dontrun{
-# Simulate data with varying levels of variance
-set.seed(123)
-n_samples <- 100
-n_features <- 50
+\donttest{
+set.seed(519)
+x <- matrix(rnorm(100 * 50, mean = 100, sd = seq(0.1, 25, length.out = 50)),
+            nrow = 100, ncol = 50, byrow = TRUE)
+colnames(x) <- paste0("Feature", 1:50)
 
-# Create features with different variance levels
-x <- matrix(nrow = n_samples, ncol = n_features)
-for (i in 1:n_features) {
-  # Variance increases with feature index
-  sd_val <- i / 2
-  x[, i] <- rnorm(n_samples, mean = 100, sd = sd_val)
-}
-colnames(x) <- paste0("Feature", 1:n_features)
-
-# Remove bottom 10\% (5 features with lowest variance)
-result1 <- run_filtervariance(x, percentile = 10)
-
-# More aggressive filtering (bottom 20\%)
-result2 <- run_filtervariance(x, percentile = 20)
+result <- run_filtervariance(x, percentile = 10)
+result
 }
 }
 \references{
