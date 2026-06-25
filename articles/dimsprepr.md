@@ -49,7 +49,7 @@ result
 #> === run_DIpreprocess pipeline result ===
 #> STATUS : OK
 #> Data   : 50 samples x 36 features (final)
-#> Time   : 5.1 second(s)
+#> Time   : 4.8 second(s)
 ```
 
 The result is a named list with intermediate and final data matrices:
