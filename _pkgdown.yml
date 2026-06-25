@@ -99,6 +99,14 @@ reference:
       - starts_with("plot_beforeafter")
       - starts_with("plot_dist_beforeafter")
 
+  - title: "Example Datasets"
+    desc: >
+      Simulated direct-injection metabolomics data included with dimsprepr
+      for testing and demonstrating the preprocessing pipeline.
+    contents:
+      - dims_data
+      - dims_metadata
+
   - title: "Internal functions"
     desc: >
       Internal functions used by dimsprepr.
