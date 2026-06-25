@@ -18,6 +18,8 @@
 #' @examples
 #' data(dims_data)
 #' dim(dims_data)
+#'
+#' @keywords datasets
 "dims_data"
 
 #' Example Sample Metadata for \code{dims_data}
@@ -42,4 +44,6 @@
 #' @examples
 #' data(dims_metadata)
 #' table(dims_metadata$Group)
+#'
+#' @keywords datasets
 "dims_metadata"

@@ -26,6 +26,7 @@ sparse to exercise missing-value filtering.
 \examples{
 data(dims_data)
 dim(dims_data)
+
 }
 \seealso{
 \link{dims_metadata}, \code{\link[=run_DIpreprocess]{run_DIpreprocess()}}

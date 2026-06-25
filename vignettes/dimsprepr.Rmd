@@ -30,8 +30,8 @@ orchestrated through a single function call.
 library(dimsprepr)
 
 # Load the bundled example dataset
-data(dims_data)
-data(dims_metadata)
+data(dims_data, package = "dimsprepr")
+data(dims_metadata, package = "dimsprepr")
 
 dim(dims_data)
 table(dims_metadata$Group)

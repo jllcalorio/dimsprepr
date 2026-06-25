@@ -28,6 +28,7 @@ injection order, and subject identifiers.
 \examples{
 data(dims_metadata)
 table(dims_metadata$Group)
+
 }
 \seealso{
 \link{dims_data}, \code{\link[=run_DIpreprocess]{run_DIpreprocess()}}
