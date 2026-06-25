@@ -1,0 +1,25 @@
+<urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
+<url><loc>https://jllcalorio.github.io/dimsprepr/404.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/CODE_OF_CONDUCT.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/LICENSE-text.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/LICENSE.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/articles/dimsprepr.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/articles/index.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/authors.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/index.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/dims_data.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/dims_metadata.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/index.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/plot_beforeafter.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/plot_dist_beforeafter.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/run_DIpreprocess.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/run_driftBatchCorrect.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/run_filterRSD.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/run_filtermissing.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/run_filtervariance.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/run_mvimpute.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/run_normalize.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/run_scale.html</loc></url>
+<url><loc>https://jllcalorio.github.io/dimsprepr/reference/run_transform.html</loc></url>
+</urlset>
+
