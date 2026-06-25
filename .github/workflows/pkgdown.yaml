@@ -18,9 +18,11 @@ name: pkgdown
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-# Needed to deploy to GitHub Pages
+# Required for GitHub Actions Pages deployment
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
   check:
@@ -46,38 +48,34 @@ jobs:
     needs: check
     if: needs.check.outputs.skip == 'false'
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      # 1. Check out the repository (Logic from redundant steps 2 & 3 removed)
+      # 1. Check out the repository
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 0
 
-      # 4. Set up Pandoc
+      # 2. Set up Pandoc
       - name: Install Pandoc
         uses: r-lib/actions/setup-pandoc@v2.7.1
 
-      # 5. Set up R
+      # 3. Set up R
       - name: Set up R
         uses: r-lib/actions/setup-r@v2.11.3
         with:
           use-public-rspm: true
-
-      # # Temporary step
-      # - name: Show dependency plan
-      #   shell: Rscript {0}
-      #   run: |
-      #     install.packages("pak")
-      #     pak::pkg_deps(".", dependencies = TRUE)
 
       - name: Install system MPI
         run: |
           sudo apt-get update
           sudo apt-get install -y libopenmpi-dev openmpi-bin
 
-      # 7. Install R dependencies
+      # 4. Install R dependencies
       - name: Install R dependencies
         uses: r-lib/actions/setup-r-dependencies@v2.3.0
         with:
@@ -93,21 +91,26 @@ jobs:
             bioc::vsn
           needs: website
 
-      # Install package
+      # 5. Install package
       - name: Install package
         run: Rscript -e 'pak::local_install(".")'
 
-      # 10. Build pkgdown site
+      # 6. Configure GitHub Pages
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # 7. Build pkgdown site (outputs to docs/)
       - name: Build site
-        run: pkgdown::build_site_github_pages(
-          new_process = FALSE
-          )
+        run: pkgdown::build_site_github_pages(new_process = FALSE)
         shell: Rscript {0}
 
-      # 11. Deploy to gh-pages
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+      # 8. Upload docs/ as Pages artifact
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          clean: true
-          branch: gh-pages
-          folder: docs
+          path: docs
+
+      # 9. Deploy
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
