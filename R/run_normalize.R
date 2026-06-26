@@ -18,15 +18,18 @@
 #'     \item \code{"quantile"}: Alias for \code{"pqn"} (PQN via pmp)
 #'     \item \code{"col_rel_abundance"}: Relative abundance per column (feature)
 #'     \item \code{"row_rel_abundance"}: Relative abundance per row (sample)
+#'     \item \code{"none"}: No normalization
 #'     \item Numeric vector: Custom normalization factors
 #'   }
+#'   When \code{method} is a column name in \code{metadata}, that column is used
+#'   as normalization factors (equivalent to \code{"specific_factor"}).
 #' @param factor_col Character. Metadata column with normalization factors.
-#'   Default: "Normalization".
+#'   Default: "Normalization". Ignored if \code{method} is a metadata column name.
 #' @param ref_sample Character. Reference sample for PQN. Default: NULL.
 #' @param group_sample Character. Group label for PQN group reference.
 #'   Default: "QC".
 #' @param qc_normalize Character. QC normalization strategy: "mean", "median", "none".
-#'   Default: "median".
+#'   Default: "none".
 #' @param group_col Character. Column with group labels. Default: "Group".
 #' @param qc_types Character vector. QC group labels. Default: c("QC", "SQC", "EQC").
 #' @param reference_method Character. Reference method for PQN via pmp: "mean" or "median".
@@ -48,7 +51,7 @@
 #'
 #' @references
 #' Dieterle, F., et al. (2006). Analytical Chemistry, 78(13), 4281-4290.
-#' \doi{10.1021/ac051632c}
+#' https://doi.org/10.1021/ac051632c
 #'
 #' @seealso \code{\link{run_DIpreprocess}}
 #'
@@ -70,11 +73,11 @@
 run_normalize <- function(
     x,
     metadata,
-    method         = "sum",
+    method         = "median",
     factor_col     = "Normalization",
     ref_sample     = NULL,
     group_sample   = "QC",
-    qc_normalize   = "median",
+    qc_normalize   = "none",
     group_col      = "Group",
     qc_types       = c("QC", "SQC", "EQC"),
     reference_method = "mean",
@@ -89,6 +92,12 @@ run_normalize <- function(
 
   mp <- .as_matrix_preserve(x)
   x_matrix <- mp$mat
+
+  # Check if method is a column name in metadata (auto-detect specific_factor)
+  if (is.character(method) && length(method) == 1L && method %in% colnames(metadata)) {
+    factor_col <- method
+    method <- "specific_factor"
+  }
 
   # Collapse QC types
   if (group_col %in% colnames(metadata)) {
@@ -135,6 +144,12 @@ run_normalize <- function(
     if (method_lc == "quantile") method_lc <- "pqn"
 
     x_matrix <- switch(method_lc,
+
+      "none" = {
+        msg("No normalization applied.")
+        all_factors <<- rep(1, nrow(x_matrix))
+        x_matrix
+      },
 
       "sum" = {
         msg("Normalizing by total sum...")

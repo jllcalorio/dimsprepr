@@ -8,11 +8,11 @@
 run_normalize(
   x,
   metadata,
-  method = "sum",
+  method = "median",
   factor_col = "Normalization",
   ref_sample = NULL,
   group_sample = "QC",
-  qc_normalize = "median",
+  qc_normalize = "none",
   group_col = "Group",
   qc_types = c("QC", "SQC", "EQC"),
   reference_method = "mean",
@@ -39,11 +39,14 @@ run_normalize(
 \item \code{"quantile"}: Alias for \code{"pqn"} (PQN via pmp)
 \item \code{"col_rel_abundance"}: Relative abundance per column (feature)
 \item \code{"row_rel_abundance"}: Relative abundance per row (sample)
+\item \code{"none"}: No normalization
 \item Numeric vector: Custom normalization factors
-}}
+}
+When \code{method} is a column name in \code{metadata}, that column is used
+as normalization factors (equivalent to \code{"specific_factor"}).}
 
 \item{factor_col}{Character. Metadata column with normalization factors.
-Default: "Normalization".}
+Default: "Normalization". Ignored if \code{method} is a metadata column name.}
 
 \item{ref_sample}{Character. Reference sample for PQN. Default: NULL.}
 
@@ -51,7 +54,7 @@ Default: "Normalization".}
 Default: "QC".}
 
 \item{qc_normalize}{Character. QC normalization strategy: "mean", "median", "none".
-Default: "median".}
+Default: "none".}
 
 \item{group_col}{Character. Column with group labels. Default: "Group".}
 
@@ -97,7 +100,7 @@ result
 }
 \references{
 Dieterle, F., et al. (2006). Analytical Chemistry, 78(13), 4281-4290.
-\doi{10.1021/ac051632c}
+https://doi.org/10.1021/ac051632c
 }
 \seealso{
 \code{\link{run_DIpreprocess}}

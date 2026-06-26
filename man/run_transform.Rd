@@ -7,7 +7,7 @@
 \usage{
 run_transform(
   x,
-  method = "log2",
+  method = "log10",
   metadata = NULL,
   group_col = "Group",
   qc_types = c("QC", "SQC", "EQC"),
@@ -30,6 +30,7 @@ run_transform(
 \item \code{"arcsin_sqrt"}: Arcsine square root transformation (data must be in [0, 1])
 \item \code{"vsn"}: Variance Stabilizing Normalization (requires \pkg{vsn})
 \item \code{"glog"}: Generalized logarithm transformation (requires \pkg{pmp})
+\item \code{"none"}: No transformation
 }}
 
 \item{metadata}{Data frame. Sample metadata, required for glog. Default: NULL.}
@@ -81,10 +82,10 @@ result
 }
 \references{
 Huber, W., et al. (2002). Bioinformatics, 18(Suppl 1), S96-S104.
-\doi{10.1093/bioinformatics/18.suppl_1.s96}
+https://doi.org/10.1093/bioinformatics/18.suppl_1.s96
 
 Parsons, H.M., et al. (2007). BMC Bioinformatics, 8, 234.
-\doi{10.1186/1471-2105-8-234}
+https://doi.org/10.1186/1471-2105-8-234
 }
 \seealso{
 \code{\link{run_DIpreprocess}}

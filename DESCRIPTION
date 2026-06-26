@@ -15,26 +15,28 @@ BugReports: https://github.com/jllcalorio/dimsprepr/issues
 Depends:
     R (>= 4.1.0)
 Imports:
+    BiocParallel,
     ggplot2,
+    grDevices,
     grid,
     gridExtra,
-    matrixStats,
-    stats
-Suggests:
-    BiocParallel,
     imputeLCMD,
-    knitr,
+    matrixStats,
     mice,
     parallelly,
     pmp,
-    rmarkdown,
+    stats,
     sva,
-    testthat (>= 3.0.0),
+    utils,
     vsn
+Suggests:
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
 VignetteBuilder: 
     knitr
-Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0
+Config/testthat/edition: 3
 Encoding: UTF-8
-Roxygen: list(markdown = TRUE)
 LazyData: true
+Roxygen: list(markdown = TRUE)

@@ -15,6 +15,7 @@
 #'     \item \code{"arcsin_sqrt"}: Arcsine square root transformation (data must be in \[0, 1\])
 #'     \item \code{"vsn"}: Variance Stabilizing Normalization (requires \pkg{vsn})
 #'     \item \code{"glog"}: Generalized logarithm transformation (requires \pkg{pmp})
+#'     \item \code{"none"}: No transformation
 #'   }
 #' @param metadata Data frame. Sample metadata, required for glog. Default: NULL.
 #' @param group_col Character. Column in `metadata` with group labels.
@@ -46,10 +47,10 @@
 #'
 #' @references
 #' Huber, W., et al. (2002). Bioinformatics, 18(Suppl 1), S96-S104.
-#' \doi{10.1093/bioinformatics/18.suppl_1.s96}
+#' https://doi.org/10.1093/bioinformatics/18.suppl_1.s96
 #'
 #' Parsons, H.M., et al. (2007). BMC Bioinformatics, 8, 234.
-#' \doi{10.1186/1471-2105-8-234}
+#' https://doi.org/10.1186/1471-2105-8-234
 #'
 #' @seealso \code{\link{run_DIpreprocess}}
 #'
@@ -66,7 +67,7 @@
 #' }
 run_transform <- function(
     x,
-    method    = "log2",
+    method    = "log10",
     metadata  = NULL,
     group_col = "Group",
     qc_types  = c("QC", "SQC", "EQC"),
@@ -79,7 +80,7 @@ run_transform <- function(
   .validate_data_matrix(x)
 
   method <- tolower(method)
-  valid_methods <- c("log2", "log10", "sqrt", "cbrt", "clr", "arcsin_sqrt", "vsn", "glog")
+  valid_methods <- c("log2", "log10", "sqrt", "cbrt", "clr", "arcsin_sqrt", "vsn", "glog", "none")
   if (!method %in% valid_methods)
     stop("Unknown transformation method '", method, "'. Supported: ",
          paste(valid_methods, collapse = ", "), ".", call. = FALSE)
@@ -108,6 +109,11 @@ run_transform <- function(
 
   x_transformed <- switch(
     method,
+
+    "none" = {
+      msg("No transformation applied.")
+      x_matrix
+    },
 
     "log2" = {
       min_val <- min(x_matrix, na.rm = TRUE)

@@ -42,10 +42,10 @@
 #'
 #' @references
 #' van den Berg, R.A., et al. (2006). BMC Genomics, 7, 142.
-#' \doi{10.1186/1471-2164-7-142}
+#' https://doi.org/10.1186/1471-2164-7-142
 #'
 #' Yang, J., et al. (2015). Frontiers in Molecular Biosciences, 2, 4.
-#' \doi{10.3389/fmolb.2015.00004}
+#' https://doi.org/10.3389/fmolb.2015.00004
 #'
 #' @seealso \code{\link{run_DIpreprocess}}
 #'
