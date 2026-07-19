@@ -7,7 +7,10 @@ Description: A complete, reproducible preprocessing pipeline for
     direct-injection mass spectrometry (DIMS) metabolomics data — missing
     value filtering, imputation, signal drift and batch correction,
     normalization, transformation, scaling, and quality filtering — in a
-    single reproducible pipeline.
+    single reproducible pipeline. Supports multi-method mode: normalization,
+    transformation, and scaling methods may each be supplied as character
+    vectors, and the pipeline computes every combination while running the
+    shared preprocessing steps only once.
 License: MIT + file LICENSE
 URL: https://jllcalorio.github.io/dimsprepr,
     https://github.com/jllcalorio/dimsprepr
