@@ -134,17 +134,40 @@ run_driftBatchCorrect <- function(
       stop("'spar_limit' must be a numeric vector of length 2.", call. = FALSE)
 
     tryCatch({
-      x_corrected <- pmp::QCRSC(
-        df       = t(x_matrix),
-        order    = as.numeric(metadata[[injection_col]]),
-        batch    = as.numeric(metadata[[batch_col]]),
-        classes  = as.vector(metadata$Group_),
-        spar     = spline_smooth_param,
-        log      = log_scale,
-        minQC    = min_QC,
-        qc_label = qc_label,
-        spar_lim = spar_limit
-      )
+      # Inner tryCatch to handle sparse-data fallback on the fly
+      x_corrected <- tryCatch({
+        pmp::QCRSC(
+          df       = t(x_matrix),
+          order    = as.numeric(metadata[[injection_col]]),
+          batch    = as.numeric(metadata[[batch_col]]),
+          classes  = as.vector(metadata$Group_),
+          spar     = spline_smooth_param,
+          log      = log_scale,
+          minQC    = min_QC,
+          qc_label = qc_label,
+          spar_lim = spar_limit
+        )
+      }, error = function(e) {
+        # ponytail: smooth.spline CV crashes when QCs are too sparse (e.g. impute_method="none").
+        # Catch the known bug and fallback to a fixed spar instead of dying.
+        if (grepl("outp", e$message, fixed = TRUE) && spline_smooth_param == 0) {
+          warning("QCRSC CV failed (likely sparse QC data). Falling back to fixed spar = 0.75.", call. = FALSE)
+          pmp::QCRSC(
+            df       = t(x_matrix),
+            order    = as.numeric(metadata[[injection_col]]),
+            batch    = as.numeric(metadata[[batch_col]]),
+            classes  = as.vector(metadata$Group_),
+            spar     = 0.75,
+            log      = log_scale,
+            minQC    = min_QC,
+            qc_label = qc_label,
+            spar_lim = spar_limit
+          )
+        } else {
+          stop(e)
+        }
+      })
+      
       x_matrix <- t(x_corrected)
       method_used <- "QCRSC"
 
