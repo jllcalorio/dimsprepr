@@ -143,137 +143,126 @@ run_normalize <- function(
     # Alias: "quantile" -> "pqn" (both use pmp::pqn_normalisation)
     if (method_lc == "quantile") method_lc <- "pqn"
 
-    x_matrix <- switch(method_lc,
+    # ponytail: avoid switch()-as-expr scope issues with <<- inside branches.
+    # Set x_matrix and all_factors directly in each branch.
+    if (method_lc == "none") {
+      msg("No normalization applied.")
+      all_factors <- rep(1, nrow(x_matrix))
 
-      "none" = {
-        msg("No normalization applied.")
-        all_factors <<- rep(1, nrow(x_matrix))
-        x_matrix
-      },
+    } else if (method_lc == "sum") {
+      msg("Normalizing by total sum...")
+      row_sums <- matrixStats::rowSums2(x_matrix, na.rm = TRUE)
+      all_factors <- row_sums
+      x_matrix <- x_matrix / row_sums
 
-      "sum" = {
-        msg("Normalizing by total sum...")
+    } else if (method_lc == "median") {
+      msg("Normalizing by median...")
+      row_medians <- matrixStats::rowMedians(x_matrix, na.rm = TRUE)
+      all_factors <- row_medians
+      x_matrix <- x_matrix / row_medians
+
+    } else if (method_lc == "specific_factor") {
+      .require_col(metadata, factor_col)
+      factor_values <- as.numeric(metadata[[factor_col]][non_qc_indices])
+
+      if (all(is.na(factor_values) | factor_values == 0)) {
+        warning("All normalization factors are NA or 0. Using 'sum' instead.", call. = FALSE)
         row_sums <- matrixStats::rowSums2(x_matrix, na.rm = TRUE)
-        all_factors <<- row_sums
-        x_matrix / row_sums
-      },
+        all_factors <- row_sums
+        x_matrix <- x_matrix / row_sums
+      } else {
+        msg(sprintf("Normalizing using factors from '%s'...", factor_col))
+        x_matrix[non_qc_indices, ] <- x_matrix[non_qc_indices, ] / factor_values
 
-      "median" = {
-        msg("Normalizing by median...")
-        row_medians <- matrixStats::rowMedians(x_matrix, na.rm = TRUE)
-        all_factors <<- row_medians
-        x_matrix / row_medians
-      },
+        qc_factor <- switch(qc_normalize,
+                            "mean"   = mean(factor_values, na.rm = TRUE),
+                            "median" = stats::median(factor_values, na.rm = TRUE),
+                            1)
+        x_matrix[qc_indices, ] <- x_matrix[qc_indices, ] / qc_factor
 
-      "specific_factor" = {
-        .require_col(metadata, factor_col)
-        factor_values <- as.numeric(metadata[[factor_col]][non_qc_indices])
+        all_factors[non_qc_indices] <- factor_values
+        all_factors[qc_indices] <- qc_factor
+      }
 
-        if (all(is.na(factor_values) | factor_values == 0)) {
-          warning("All normalization factors are NA or 0. Using 'sum' instead.", call. = FALSE)
-          row_sums <- matrixStats::rowSums2(x_matrix, na.rm = TRUE)
-          all_factors <<- row_sums
-          x_matrix / row_sums
-        } else {
-          msg(sprintf("Normalizing using factors from '%s'...", factor_col))
-          x_matrix[non_qc_indices, ] <- x_matrix[non_qc_indices, ] / factor_values
+    } else if (method_lc == "pqn_global") {
+      msg("Applying PQN (global median reference)...")
+      reference_spectrum <- matrixStats::colMedians(x_matrix, na.rm = TRUE)
+      quotients <- sweep(x_matrix, 2, reference_spectrum, "/")
+      median_quotients <- matrixStats::rowMedians(quotients, na.rm = TRUE)
+      all_factors <- median_quotients
+      x_matrix <- x_matrix / median_quotients
 
-          qc_factor <- switch(qc_normalize,
-                              "mean"   = mean(factor_values, na.rm = TRUE),
-                              "median" = stats::median(factor_values, na.rm = TRUE),
-                              1)
-          x_matrix[qc_indices, ] <- x_matrix[qc_indices, ] / qc_factor
+    } else if (method_lc == "pqn_reference") {
+      if (is.null(ref_sample))
+        stop("'ref_sample' must be specified for pqn_reference.", call. = FALSE)
+      .require_col(metadata, sample_id_col)
+      ref_idx <- which(metadata[[sample_id_col]] == ref_sample)
+      if (length(ref_idx) == 0)
+        stop(sprintf("Reference sample '%s' not found.", ref_sample), call. = FALSE)
 
-          all_factors[non_qc_indices] <<- factor_values
-          all_factors[qc_indices] <<- qc_factor
-          x_matrix
-        }
-      },
+      msg(sprintf("Applying PQN (reference: %s)...", ref_sample))
+      reference_spectrum <- as.numeric(x_matrix[ref_idx[1], ])
+      quotients <- sweep(x_matrix, 2, reference_spectrum, "/")
+      median_quotients <- matrixStats::rowMedians(quotients, na.rm = TRUE)
+      all_factors <- median_quotients
+      x_matrix <- x_matrix / median_quotients
 
-      "pqn_global" = {
-        msg("Applying PQN (global median reference)...")
-        reference_spectrum <- matrixStats::colMedians(x_matrix, na.rm = TRUE)
-        quotients <- sweep(x_matrix, 2, reference_spectrum, "/")
-        median_quotients <- matrixStats::rowMedians(quotients, na.rm = TRUE)
-        all_factors <<- median_quotients
-        x_matrix / median_quotients
-      },
+    } else if (method_lc == "pqn_group") {
+      pooled_indices <- metadata$Group_ == "QC"
+      if (sum(pooled_indices) == 0)
+        stop("No QC samples found for group PQN.", call. = FALSE)
 
-      "pqn_reference" = {
-        if (is.null(ref_sample))
-          stop("'ref_sample' must be specified for pqn_reference.", call. = FALSE)
-        .require_col(metadata, sample_id_col)
-        ref_idx <- which(metadata[[sample_id_col]] == ref_sample)
-        if (length(ref_idx) == 0)
-          stop(sprintf("Reference sample '%s' not found.", ref_sample), call. = FALSE)
+      msg(sprintf("Applying PQN (group: %s)...", group_sample))
+      reference_spectrum <- matrixStats::colMedians(
+        x_matrix[pooled_indices, , drop = FALSE], na.rm = TRUE
+      )
+      quotients <- sweep(x_matrix, 2, reference_spectrum, "/")
+      median_quotients <- matrixStats::rowMedians(quotients, na.rm = TRUE)
+      all_factors <- median_quotients
+      x_matrix <- x_matrix / median_quotients
 
-        msg(sprintf("Applying PQN (reference: %s)...", ref_sample))
-        reference_spectrum <- as.numeric(x_matrix[ref_idx[1], ])
-        quotients <- sweep(x_matrix, 2, reference_spectrum, "/")
-        median_quotients <- matrixStats::rowMedians(quotients, na.rm = TRUE)
-        all_factors <<- median_quotients
-        x_matrix / median_quotients
-      },
+    } else if (method_lc == "pqn") {
+      if (!requireNamespace("pmp", quietly = TRUE))
+        stop("Package 'pmp' required. Install with: BiocManager::install('pmp')", call. = FALSE)
 
-      "pqn_group" = {
-        pooled_indices <- metadata$Group_ == "QC"
-        if (sum(pooled_indices) == 0)
-          stop("No QC samples found for group PQN.", call. = FALSE)
-
-        msg(sprintf("Applying PQN (group: %s)...", group_sample))
-        reference_spectrum <- matrixStats::colMedians(
-          x_matrix[pooled_indices, , drop = FALSE], na.rm = TRUE
+      tryCatch({
+        msg("Applying PQN normalization via pmp...")
+        normalized <- pmp::pqn_normalisation(
+          t(x_matrix),
+          classes    = metadata$Group_,
+          qc_label   = "QC",
+          ref_mean   = NULL,
+          qc_frac    = 0,
+          sample_frac = 0,
+          ref_method = reference_method
         )
-        quotients <- sweep(x_matrix, 2, reference_spectrum, "/")
-        median_quotients <- matrixStats::rowMedians(quotients, na.rm = TRUE)
-        all_factors <<- median_quotients
-        x_matrix / median_quotients
-      },
-
-      "pqn" = {
-        if (!requireNamespace("pmp", quietly = TRUE))
-          stop("Package 'pmp' required. Install with: BiocManager::install('pmp')", call. = FALSE)
-
-        tryCatch({
-          msg("Applying PQN normalization via pmp...")
-          normalized <- pmp::pqn_normalisation(
-            t(x_matrix),
-            classes    = metadata$Group_,
-            qc_label   = "QC",
-            ref_mean   = NULL,
-            qc_frac    = 0,
-            sample_frac = 0,
-            ref_method = reference_method
-          )
-          t(normalized)
-        }, error = function(e) {
-          warning("PQN normalization failed: ", e$message, ". Using 'sum' instead.", call. = FALSE)
-          row_sums <- matrixStats::rowSums2(x_matrix, na.rm = TRUE)
-          all_factors <<- row_sums
-          x_matrix / row_sums
-        })
-      },
-
-      "col_rel_abundance" = {
-        msg("Normalizing by column relative abundance...")
-        col_sums <- matrixStats::colSums2(x_matrix, na.rm = TRUE)
-        if (any(col_sums == 0))
-          warning("Columns sum to 0; relative abundance will produce NaN.", call. = FALSE)
-        all_factors <<- col_sums
-        sweep(x_matrix, 2, col_sums, "/")
-      },
-
-      "row_rel_abundance" = {
-        msg("Normalizing by row relative abundance...")
+        x_matrix <- t(normalized)
+      }, error = function(e) {
+        warning("PQN normalization failed: ", e$message, ". Using 'sum' instead.", call. = FALSE)
         row_sums <- matrixStats::rowSums2(x_matrix, na.rm = TRUE)
-        if (any(row_sums == 0))
-          warning("Rows sum to 0; relative abundance will produce NaN.", call. = FALSE)
         all_factors <<- row_sums
-        x_matrix / row_sums
-      },
+        x_matrix <<- x_matrix / row_sums
+      })
 
+    } else if (method_lc == "col_rel_abundance") {
+      msg("Normalizing by column relative abundance...")
+      col_sums <- matrixStats::colSums2(x_matrix, na.rm = TRUE)
+      if (any(col_sums == 0))
+        warning("Columns sum to 0; relative abundance will produce NaN.", call. = FALSE)
+      all_factors <- col_sums
+      x_matrix <- sweep(x_matrix, 2, col_sums, "/")
+
+    } else if (method_lc == "row_rel_abundance") {
+      msg("Normalizing by row relative abundance...")
+      row_sums <- matrixStats::rowSums2(x_matrix, na.rm = TRUE)
+      if (any(row_sums == 0))
+        warning("Rows sum to 0; relative abundance will produce NaN.", call. = FALSE)
+      all_factors <- row_sums
+      x_matrix <- x_matrix / row_sums
+
+    } else {
       stop("Unknown normalization method '", method, "'.", call. = FALSE)
-    )
+    }
 
     method_description <- if (method_lc == "pqn" && tolower(method) == "quantile") {
       "quantile (pqn via pmp)"
