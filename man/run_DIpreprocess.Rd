@@ -90,7 +90,8 @@ it must satisfy the threshold in all groups.}
 \item{impute_method}{Numeric > 0. Fraction of the smallest positive value
 per feature used for imputation. Default: \code{0.2}.}
 
-\item{impute_method_post_drift}{Missing value imputation after signal drift and batch correction.}
+\item{impute_method_post_drift}{Missing value imputation after signal drift and batch correction.
+If \code{NULL} (default), takes on the value of \code{impute_method}.}
 
 \item{positive_only}{Logical. If \code{TRUE}, imputation only considers positive values. Default: \code{TRUE}.}
 
@@ -138,9 +139,17 @@ Default: \code{"log10"}.}
 
 \item{vsn_cores}{Integer or \code{"max"}. Cores for VSN. Default: \code{1}.}
 
-\item{scale_nonpls}{Character. Scaling for NONPLS branch (\code{"auto"}, \code{"pareto"}, \code{"mean"}).}
+\item{scale_nonpls}{Character or character vector. One or more scaling methods
+for the NONPLS branch (\code{"auto"}, \code{"pareto"}, \code{"mean"},
+\code{"none"}). When multiple methods are supplied, each is paired with
+every element of \code{scale_pls} (Cartesian product). Only the varying
+scale components are appended to the combination name (e.g.
+\code{median_log10_auto} when only \code{scale_nonpls} varies).}
 
-\item{scale_pls}{Character. Scaling for PLS branch (\code{"pareto"}, \code{"auto"}, \code{"mean"}).}
+\item{scale_pls}{Character or character vector. One or more scaling methods
+for the PLS branch (\code{"pareto"}, \code{"auto"}, \code{"mean"},
+\code{"none"}). When multiple methods are supplied, each is paired with
+every element of \code{scale_nonpls} (Cartesian product).}
 
 \item{rsd_threshold}{Numeric [0, 1]. QC-RSD threshold. Default: \code{0.3}.}
 
@@ -165,14 +174,19 @@ preprocessing steps. If a tracked feature is removed, the step and reason
 }
 \value{
 \describe{
-\item{Single combination (scalar \code{normalize_method} and scalar
-\code{transform_method})}{A named list of class \code{run_DIpreprocess}
-- identical to the original behaviour.}
-\item{Multiple combinations (either argument is a vector of length > 1)}{A
-named list of class \code{run_DIpreprocess_multi}.  Each element is named
-\code{<normalize>_<transform>} (e.g. \code{sum_log10}) and is itself a
-\code{run_DIpreprocess} object.  The shared pre-normalization data
-(post-drift-correction) is stored in the \code{shared} attribute.}
+\item{Single combination (all four method arguments are scalar)}{A named
+list of class \code{run_DIpreprocess} — identical to the original
+behaviour.}
+\item{Multiple combinations (any method argument is a vector of length
+> 1)}{A named list of class \code{run_DIpreprocess_multi}.  Each element
+is a \code{run_DIpreprocess} object. Element names follow the pattern
+\code{<normalize>_<transform>} when only normalization/transformation vary
+(e.g. \code{sum_log10}), or include scale suffixes when scaling varies
+(e.g. \code{median_log10_auto}, \code{median_log10_auto_pareto}).
+Scale components are appended only for those arguments that have more
+than one unique value: \code{scale_nonpls} first, then \code{scale_pls}.
+The shared pre-normalization data (post-drift-correction) is stored in
+the \code{shared} attribute of the returned list.}
 }
 }
 \description{
@@ -180,15 +194,20 @@ Runs a complete, sequential preprocessing pipeline for metabolomics data by
 orchestrating the individual \code{run_*} functions of \pkg{dimsprepr}. Steps
 execute in a fixed, reproducible order regardless of argument arrangement.
 
-When \code{normalize_method} and/or \code{transform_method} are supplied as
-character vectors with more than one element, \strong{all combinations} are
-computed.  The steps prior to normalization (validation, outlier removal,
-missing-value filtering, imputation, and drift/batch correction) are executed
-\strong{only once}; the normalization -> transformation -> scaling -> quality
-filtering -> replicate-merging branch is then repeated for every
-normalization x transformation pair.  The return value in this case is a
-plain \code{list} (class \code{"run_DIpreprocess_multi"}) whose elements are
-named \code{<normalize>_<transform>} and each hold a standard
+When \code{normalize_method}, \code{transform_method}, \code{scale_nonpls},
+and/or \code{scale_pls} are supplied as character vectors with more than one
+element, \strong{all combinations} are computed with three levels of
+deduplication: (1) the steps prior to normalization (validation, outlier
+removal, missing-value filtering, imputation, and drift/batch correction) run
+\strong{only once}; (2) normalization and transformation run \strong{once per
+unique normalize x transform pair}; (3) scaling -> quality filtering ->
+replicate-merging runs \strong{once per full combination}.  The return value
+in this case is a plain \code{list} (class \code{"run_DIpreprocess_multi"})
+whose elements are named \code{<normalize>_<transform>} when only
+normalization or transformation methods vary, or
+\code{<normalize>_<transform>_<scale_nonpls>} /
+\code{<normalize>_<transform>_<scale_nonpls>_<scale_pls>} when scaling
+methods also vary, and each element holds a standard
 \code{run_DIpreprocess} object.
 }
 \details{
@@ -199,24 +218,35 @@ named \code{<normalize>_<transform>} and each hold a standard
 \item Missing-value filtering (\code{\link{run_filtermissing}})
 \item Missing-value imputation (\code{\link{run_mvimpute}})
 \item Signal drift correction (\code{\link{run_driftBatchCorrect}})
-\item \emph{[Per combination]} Normalization (\code{\link{run_normalize}})
-\item \emph{[Per combination]} Transformation (\code{\link{run_transform}})
-\item \emph{[Per combination]} Scaling (\code{\link{run_scale}})
-\item \emph{[Per combination]} Quality filtering (\code{\link{run_filterRSD}},
-\code{\link{run_filtervariance}})
-\item \emph{[Per combination]} Common-feature harmonisation & replicate merging
+\item \emph{[Per normalize × transform pair]} Normalization
+(\code{\link{run_normalize}})
+\item \emph{[Per normalize × transform pair]} Transformation
+(\code{\link{run_transform}})
+\item \emph{[Per full combination]} Scaling (\code{\link{run_scale}})
+\item \emph{[Per full combination]} Quality filtering
+(\code{\link{run_filterRSD}}, \code{\link{run_filtervariance}})
+\item \emph{[Per full combination]} Common-feature harmonisation &
+replicate merging
 }
+
+\strong{Deduplication across methods:} When multiple methods are requested,
+Steps 1–5 run only once. Steps 6–7 run once per unique
+\code{normalize_method × transform_method} pair; their output is cached
+and reused across all scale combinations that share the same pair.
+Steps 8–10 run once per full
+\code{normalize × transform × scale_nonpls × scale_pls} combination.
 }
 \note{
 \strong{Zero Handling:} The pipeline automatically converts all \code{0} values in
 \code{x} to \code{NA} prior to analysis.
 
-\strong{Multi-method pre-flight checks:} When vectors are supplied for
-\code{normalize_method} or \code{transform_method}, the function validates
-all method-specific requirements (e.g. \code{norm_factor_col} for
-\code{"specific_factor"}, \code{normalize_ref_sample} for
-\code{"pqn_reference"}) \emph{before} executing any preprocessing step, so
-errors are surfaced early rather than mid-run.
+\strong{Multi-method pre-flight checks:} When vectors are supplied for any
+of \code{normalize_method}, \code{transform_method}, \code{scale_nonpls}, or
+\code{scale_pls}, the function validates all method-specific requirements
+(e.g. \code{norm_factor_col} for \code{"specific_factor"},
+\code{normalize_ref_sample} for \code{"pqn_reference"}) \emph{before}
+executing any preprocessing step, so errors are surfaced early rather than
+mid-run.
 }
 \examples{
 \dontrun{
@@ -258,7 +288,7 @@ result_multi <- run_DIpreprocess(
 class(result_multi)           # "run_DIpreprocess_multi"
 names(result_multi)           # "median_log10"  "median_vsn"
 
-# --- Full Cartesian product ---
+# --- Full Cartesian product (norm × transform) ---
 result_cart <- run_DIpreprocess(
   x                = x,
   metadata         = meta,
@@ -268,6 +298,18 @@ result_cart <- run_DIpreprocess(
 )
 names(result_cart)
 # "sum_log10"  "sum_vsn"  "median_log10"  "median_vsn"
+
+# --- scale_nonpls as a vector (norm+transform computed once, scaled twice) ---
+result_scale <- run_DIpreprocess(
+  x                = x,
+  metadata         = meta,
+  normalize_method = "median",
+  transform_method = "log10",
+  scale_nonpls     = c("auto", "pareto"),
+  correct_drift    = FALSE
+)
+names(result_scale)
+# "median_log10_auto"  "median_log10_pareto"
 }
 }
 \references{

@@ -5,15 +5,20 @@
 #' orchestrating the individual \code{run_*} functions of \pkg{dimsprepr}. Steps
 #' execute in a fixed, reproducible order regardless of argument arrangement.
 #'
-#' When \code{normalize_method} and/or \code{transform_method} are supplied as
-#' character vectors with more than one element, \strong{all combinations} are
-#' computed.  The steps prior to normalization (validation, outlier removal,
-#' missing-value filtering, imputation, and drift/batch correction) are executed
-#' \strong{only once}; the normalization -> transformation -> scaling -> quality
-#' filtering -> replicate-merging branch is then repeated for every
-#' normalization x transformation pair.  The return value in this case is a
-#' plain \code{list} (class \code{"run_DIpreprocess_multi"}) whose elements are
-#' named \code{<normalize>_<transform>} and each hold a standard
+#' When \code{normalize_method}, \code{transform_method}, \code{scale_nonpls},
+#' and/or \code{scale_pls} are supplied as character vectors with more than one
+#' element, \strong{all combinations} are computed with three levels of
+#' deduplication: (1) the steps prior to normalization (validation, outlier
+#' removal, missing-value filtering, imputation, and drift/batch correction) run
+#' \strong{only once}; (2) normalization and transformation run \strong{once per
+#' unique normalize x transform pair}; (3) scaling -> quality filtering ->
+#' replicate-merging runs \strong{once per full combination}.  The return value
+#' in this case is a plain \code{list} (class \code{"run_DIpreprocess_multi"})
+#' whose elements are named \code{<normalize>_<transform>} when only
+#' normalization or transformation methods vary, or
+#' \code{<normalize>_<transform>_<scale_nonpls>} /
+#' \code{<normalize>_<transform>_<scale_nonpls>_<scale_pls>} when scaling
+#' methods also vary, and each element holds a standard
 #' \code{run_DIpreprocess} object.
 #'
 #' @param x Matrix or data frame. Numeric feature data with \strong{samples in rows}
@@ -46,7 +51,8 @@
 #' @param missing_include_qc Logical. If \code{TRUE}, include QC samples. Default: \code{FALSE}.
 #' @param impute_method Numeric > 0. Fraction of the smallest positive value
 #'   per feature used for imputation. Default: \code{0.2}.
-#' @param impute_method_post_drift Missing value imputation after signal drift and batch correction.
+#' @param impute_method_post_drift Missing value imputation after signal drift and batch correction. 
+#'   If \code{NULL} (default), takes on the value of \code{impute_method}.
 #' @param positive_only Logical. If \code{TRUE}, imputation only considers positive values. Default: \code{TRUE}.
 #' @param correct_drift Logical. If \code{TRUE}, apply QCRSC correction. Default: \code{TRUE}.
 #' @param remove_uncorrected Logical. If \code{TRUE}, remove features QCRSC
@@ -81,8 +87,16 @@
 #' }
 #' Default: \code{"log10"}.
 #' @param vsn_cores Integer or \code{"max"}. Cores for VSN. Default: \code{1}.
-#' @param scale_nonpls Character. Scaling for NONPLS branch (\code{"auto"}, \code{"pareto"}, \code{"mean"}).
-#' @param scale_pls Character. Scaling for PLS branch (\code{"pareto"}, \code{"auto"}, \code{"mean"}).
+#' @param scale_nonpls Character or character vector. One or more scaling methods
+#'   for the NONPLS branch (\code{"auto"}, \code{"pareto"}, \code{"mean"},
+#'   \code{"none"}). When multiple methods are supplied, each is paired with
+#'   every element of \code{scale_pls} (Cartesian product). Only the varying
+#'   scale components are appended to the combination name (e.g.
+#'   \code{median_log10_auto} when only \code{scale_nonpls} varies).
+#' @param scale_pls Character or character vector. One or more scaling methods
+#'   for the PLS branch (\code{"pareto"}, \code{"auto"}, \code{"mean"},
+#'   \code{"none"}). When multiple methods are supplied, each is paired with
+#'   every element of \code{scale_nonpls} (Cartesian product).
 #' @param rsd_threshold Numeric \[0, 1\]. QC-RSD threshold. Default: \code{0.3}.
 #' @param rsd_qc_type Character. QC type for RSD (\code{"EQC"}, \code{"SQC"}, \code{"QC"}).
 #' @param variance_percentile Numeric \[0, 100\]. Percentile to filter. Default: \code{10}.
@@ -100,14 +114,19 @@
 #'
 #' @return
 #' \describe{
-#'   \item{Single combination (scalar \code{normalize_method} and scalar
-#'     \code{transform_method})}{A named list of class \code{run_DIpreprocess}
-#'     - identical to the original behaviour.}
-#'   \item{Multiple combinations (either argument is a vector of length > 1)}{A
-#'     named list of class \code{run_DIpreprocess_multi}.  Each element is named
-#'     \code{<normalize>_<transform>} (e.g. \code{sum_log10}) and is itself a
-#'     \code{run_DIpreprocess} object.  The shared pre-normalization data
-#'     (post-drift-correction) is stored in the \code{shared} attribute.}
+#'   \item{Single combination (all four method arguments are scalar)}{A named
+#'     list of class \code{run_DIpreprocess} — identical to the original
+#'     behaviour.}
+#'   \item{Multiple combinations (any method argument is a vector of length
+#'     > 1)}{A named list of class \code{run_DIpreprocess_multi}.  Each element
+#'     is a \code{run_DIpreprocess} object. Element names follow the pattern
+#'     \code{<normalize>_<transform>} when only normalization/transformation vary
+#'     (e.g. \code{sum_log10}), or include scale suffixes when scaling varies
+#'     (e.g. \code{median_log10_auto}, \code{median_log10_auto_pareto}).
+#'     Scale components are appended only for those arguments that have more
+#'     than one unique value: \code{scale_nonpls} first, then \code{scale_pls}.
+#'     The shared pre-normalization data (post-drift-correction) is stored in
+#'     the \code{shared} attribute of the returned list.}
 #' }
 #'
 #' @details
@@ -118,24 +137,35 @@
 #'   \item Missing-value filtering (\code{\link{run_filtermissing}})
 #'   \item Missing-value imputation (\code{\link{run_mvimpute}})
 #'   \item Signal drift correction (\code{\link{run_driftBatchCorrect}})
-#'   \item \emph{\[Per combination\]} Normalization (\code{\link{run_normalize}})
-#'   \item \emph{\[Per combination\]} Transformation (\code{\link{run_transform}})
-#'   \item \emph{\[Per combination\]} Scaling (\code{\link{run_scale}})
-#'   \item \emph{\[Per combination\]} Quality filtering (\code{\link{run_filterRSD}},
-#'     \code{\link{run_filtervariance}})
-#'   \item \emph{\[Per combination\]} Common-feature harmonisation & replicate merging
+#'   \item \emph{\[Per normalize × transform pair\]} Normalization
+#'     (\code{\link{run_normalize}})
+#'   \item \emph{\[Per normalize × transform pair\]} Transformation
+#'     (\code{\link{run_transform}})
+#'   \item \emph{\[Per full combination\]} Scaling (\code{\link{run_scale}})
+#'   \item \emph{\[Per full combination\]} Quality filtering
+#'     (\code{\link{run_filterRSD}}, \code{\link{run_filtervariance}})
+#'   \item \emph{\[Per full combination\]} Common-feature harmonisation &
+#'     replicate merging
 #' }
+#'
+#' \strong{Deduplication across methods:} When multiple methods are requested,
+#' Steps 1–5 run only once. Steps 6–7 run once per unique
+#' \code{normalize_method × transform_method} pair; their output is cached
+#' and reused across all scale combinations that share the same pair.
+#' Steps 8–10 run once per full
+#' \code{normalize × transform × scale_nonpls × scale_pls} combination.
 #'
 #' @note
 #' \strong{Zero Handling:} The pipeline automatically converts all \code{0} values in
 #' \code{x} to \code{NA} prior to analysis.
 #'
-#' \strong{Multi-method pre-flight checks:} When vectors are supplied for
-#' \code{normalize_method} or \code{transform_method}, the function validates
-#' all method-specific requirements (e.g. \code{norm_factor_col} for
-#' \code{"specific_factor"}, \code{normalize_ref_sample} for
-#' \code{"pqn_reference"}) \emph{before} executing any preprocessing step, so
-#' errors are surfaced early rather than mid-run.
+#' \strong{Multi-method pre-flight checks:} When vectors are supplied for any
+#' of \code{normalize_method}, \code{transform_method}, \code{scale_nonpls}, or
+#' \code{scale_pls}, the function validates all method-specific requirements
+#' (e.g. \code{norm_factor_col} for \code{"specific_factor"},
+#' \code{normalize_ref_sample} for \code{"pqn_reference"}) \emph{before}
+#' executing any preprocessing step, so errors are surfaced early rather than
+#' mid-run.
 #'
 #' @author John Lennon L. Calorio
 #'
@@ -192,7 +222,7 @@
 #' class(result_multi)           # "run_DIpreprocess_multi"
 #' names(result_multi)           # "median_log10"  "median_vsn"
 #'
-#' # --- Full Cartesian product ---
+#' # --- Full Cartesian product (norm × transform) ---
 #' result_cart <- run_DIpreprocess(
 #'   x                = x,
 #'   metadata         = meta,
@@ -202,6 +232,18 @@
 #' )
 #' names(result_cart)
 #' # "sum_log10"  "sum_vsn"  "median_log10"  "median_vsn"
+#'
+#' # --- scale_nonpls as a vector (norm+transform computed once, scaled twice) ---
+#' result_scale <- run_DIpreprocess(
+#'   x                = x,
+#'   metadata         = meta,
+#'   normalize_method = "median",
+#'   transform_method = "log10",
+#'   scale_nonpls     = c("auto", "pareto"),
+#'   correct_drift    = FALSE
+#' )
+#' names(result_scale)
+#' # "median_log10_auto"  "median_log10_pareto"
 #' }
 run_DIpreprocess <- function(
     x,
@@ -297,31 +339,13 @@ run_DIpreprocess <- function(
   if (!is.null(track) && !is.character(track))
       stop("'track' must be a character vector of feature names.")
   
-  valid_norm_methods <- c("sum", "median", "specific_factor", "pqn_global",
-                          "pqn_reference", "pqn_group", "quantile", "none")
-  valid_trans_methods <- c("log2", "log10", "sqrt", "cbrt", "clr",
-                           "arcsin_sqrt", "vsn", "glog", "none")
-
-  # Coerce to character vector and deduplicate while preserving order
+  # Coerce to character vector and deduplicate while preserving order.
+  # ponytail: method name validation is delegated to run_normalize / run_transform
+  # / run_scale, so adding new methods there doesn't require touching this function.
   normalize_method <- unique(as.character(normalize_method))
   transform_method <- unique(as.character(transform_method))
-
-  # Validate every supplied method name up front
-  bad_norm <- setdiff(tolower(normalize_method), valid_norm_methods)
-  if (length(bad_norm) > 0L)
-    stop(sprintf(
-      "Unknown normalize_method value(s): %s.\n  Supported: %s.",
-      paste(bad_norm, collapse = ", "),
-      paste(valid_norm_methods, collapse = ", ")
-    ))
-
-  bad_trans <- setdiff(tolower(transform_method), valid_trans_methods)
-  if (length(bad_trans) > 0L)
-    stop(sprintf(
-      "Unknown transform_method value(s): %s.\n  Supported: %s.",
-      paste(bad_trans, collapse = ", "),
-      paste(valid_trans_methods, collapse = ", ")
-    ))
+  scale_nonpls     <- unique(as.character(scale_nonpls))
+  scale_pls        <- unique(as.character(scale_pls))
 
   # Method-specific pre-flight checks -----------------------------------------
 
@@ -340,65 +364,25 @@ run_DIpreprocess <- function(
       ))
   }
 
-  if ("pqn_reference" %in% tolower(normalize_method)) {
-    if (is.null(normalize_ref_sample) || !nzchar(normalize_ref_sample))
-      stop(paste0(
-        "normalize_method = 'pqn_reference' requires a reference sample name ",
-        "supplied via normalize_ref_sample, but none was provided."
-      ))
-    if (sample_id_col %in% colnames(metadata)) {
-      if (!normalize_ref_sample %in% metadata[[sample_id_col]])
-        stop(sprintf(
-          paste0("normalize_method = 'pqn_reference': reference sample '%s' was ",
-                 "not found in the '%s' column of metadata."),
-          normalize_ref_sample, sample_id_col
-        ))
-    }
-  }
-
-  if ("pqn_group" %in% tolower(normalize_method)) {
-    if (group_col %in% colnames(metadata)) {
-      qc_present <- any(metadata[[group_col]] %in% qc_types)
-      if (!qc_present)
-        stop(sprintf(
-          paste0("normalize_method = 'pqn_group' requires QC samples (one of: %s) ",
-                 "in the '%s' column, but none were found."),
-          paste(qc_types, collapse = ", "), group_col
-        ))
-    }
-  }
-
-  if ("glog" %in% tolower(transform_method)) {
-    if (!requireNamespace("pmp", quietly = TRUE))
-      stop(paste0(
-        "transform_method = 'glog' requires the 'pmp' package.\n",
-        "  Install it with: BiocManager::install('pmp')"
-      ))
-  }
-
-  if ("vsn" %in% tolower(transform_method)) {
-    if (!requireNamespace("vsn", quietly = TRUE))
-      stop(paste0(
-        "transform_method = 'vsn' requires the 'vsn' package.\n",
-        "  Install it with: BiocManager::install('vsn')"
-      ))
-    if (!requireNamespace("BiocParallel", quietly = TRUE))
-      stop(paste0(
-        "transform_method = 'vsn' also requires the 'BiocParallel' package.\n",
-        "  Install it with: BiocManager::install('BiocParallel')"
-      ))
-  }
-
   # Determine multi-method mode -----------------------------------------------
-  is_multi <- length(normalize_method) > 1L || length(transform_method) > 1L
+  is_multi <- length(normalize_method) > 1L || length(transform_method) > 1L ||
+              length(scale_nonpls) > 1L     || length(scale_pls) > 1L
 
-  # Build Cartesian product of combinations
+  # Build Cartesian product of all four method dimensions
   combos <- expand.grid(
-    norm  = normalize_method,
-    trans = transform_method,
+    norm     = normalize_method,
+    trans    = transform_method,
+    scale_np = scale_nonpls,
+    scale_p  = scale_pls,
     stringsAsFactors = FALSE
   )
-  combo_names <- paste(combos$norm, combos$trans, sep = "_")
+
+  # Only append a scale component to the name when it has > 1 unique value,
+  # mirroring how norm/trans are always both included.
+  name_parts <- list(combos$norm, combos$trans)
+  if (length(scale_nonpls) > 1L) name_parts <- c(name_parts, list(combos$scale_np))
+  if (length(scale_pls)    > 1L) name_parts <- c(name_parts, list(combos$scale_p))
+  combo_names <- do.call(paste, c(name_parts, list(sep = "_")))
 
   if (is_multi) {
     msg(sprintf(
@@ -406,7 +390,8 @@ run_DIpreprocess <- function(
       nrow(combos), paste(combo_names, collapse = ", ")
     ))
     msg("Steps 1-5 (through drift correction) will run once; ",
-        "Steps 6-10 will run per combination.")
+        "Steps 6-7 (norm+transform) once per unique norm x transform pair; ",
+        "Steps 8-10 once per full combination.")
   }
 
   # ===========================================================================
@@ -439,28 +424,8 @@ run_DIpreprocess <- function(
       stop("'metadata' must be a data frame.")
     if (nrow(x) != nrow(metadata))
       stop("nrow(x) != nrow(metadata).")
-    if (!is.numeric(missing_threshold) || length(missing_threshold) != 1L ||
-        missing_threshold < 0 || missing_threshold > 1)
-      stop("'missing_threshold' must be a single numeric value in [0, 1].")
-    .is_valid_impute <- function(m) {
-      (is.numeric(m) && length(m) == 1L && m > 0) ||
-      (is.character(m) && length(m) == 1L)
-    }
-    
-    if (!.is_valid_impute(impute_method)) {
-      stop("'impute_method' must be a single positive numeric value or a character string (e.g., 'none').")
-    }
-    
-    if (!is.null(impute_method_post_drift) && !.is_valid_impute(impute_method_post_drift)) {
-      stop("'impute_method_post_drift' must be NULL, a positive numeric value, or a character string.")
-    }
     if (!scale_filter_ref %in% c("auto", "NONPLS", "PLS"))
       stop("'scale_filter_ref' must be one of: 'auto', 'NONPLS', 'PLS'.")
-    if (!rsd_qc_type %in% c("QC", "SQC", "EQC"))
-      stop("'rsd_qc_type' must be one of: 'QC', 'SQC', 'EQC'.")
-    if (!is.numeric(variance_percentile) || length(variance_percentile) != 1L ||
-        variance_percentile < 0 || variance_percentile > 100)
-      stop("'variance_percentile' must be a numeric value in [0, 100].")
     if (!group_col %in% colnames(metadata))
       stop(sprintf("group_col '%s' not found in metadata.", group_col))
 
@@ -793,10 +758,82 @@ run_DIpreprocess <- function(
   }
 
   # ===========================================================================
-  # STEPS 6-10: PER-COMBINATION HELPER
+  # STEPS 6-7: PER NORM×TRANSFORM HELPER
   # ===========================================================================
 
-  .run_branch <- function(norm_m, trans_m, combo_label) {
+  # Runs normalization + transformation only. Returns a list with df_norm,
+  # df_trans, norm_m, trans_m, and error. Result is cached so multiple scale
+  # combinations sharing the same (norm, trans) pair avoid redundant work.
+  .run_norm_trans <- function(norm_m, trans_m) {
+    df       <- shared$data_corrected
+    metadata <- as.data.frame(shared$metadata)
+    nt_label <- paste(norm_m, trans_m, sep = "_")
+
+    tryCatch({
+
+      # =====================================================================
+      # 6. NORMALIZATION
+      # =====================================================================
+      msg(sprintf("  [%s] Step 6: Normalizing (%s)...", nt_label, norm_m))
+
+      if (norm_m == "none") {
+        df_norm <- df
+      } else {
+        norm_result <- run_normalize(
+          x              = df,
+          metadata       = metadata,
+          method         = norm_m,
+          factor_col     = norm_factor_col,
+          ref_sample     = normalize_ref_sample,
+          qc_normalize   = normalize_qc_method,
+          group_col      = "Group_",
+          qc_types       = "QC",   # meta_snap$Group_ is already recoded to "QC"
+          sample_id_col  = "Sample",
+          verbose        = FALSE
+        )
+        df_norm <- norm_result$data
+      }
+
+      # =====================================================================
+      # 7. TRANSFORMATION
+      # =====================================================================
+      msg(sprintf("  [%s] Step 7: Transforming (%s)...", nt_label, trans_m))
+
+      if (trans_m == "none") {
+        df_trans <- df_norm
+      } else {
+        trans_result <- run_transform(
+          x         = df_norm,
+          method    = trans_m,
+          metadata  = metadata,
+          group_col = "Group_",   # already recoded: all QC types -> "QC"
+          qc_types  = "QC",
+          num_cores = vsn_cores,
+          verbose   = FALSE
+        )
+        df_trans <- trans_result$data
+      }
+
+      list(df_norm = df_norm, df_trans = df_trans,
+           norm_m = norm_m, trans_m = trans_m, error = NULL)
+
+    }, error = function(e) {
+      message(sprintf("run_DIpreprocess ERROR in norm+transform '%s': %s",
+                      nt_label, e$message))
+      list(df_norm = NULL, df_trans = NULL,
+           norm_m = norm_m, trans_m = trans_m, error = e$message)
+    })
+  }
+
+  # ===========================================================================
+  # STEPS 8-10: PER FULL-COMBINATION HELPER
+  # ===========================================================================
+
+  # Runs scaling -> quality filtering -> replicate merging for one combination.
+  # 'nt'       : result from .run_norm_trans (may carry $error)
+  # 'scale_np' : scalar scale method for the NONPLS branch
+  # 'scale_p'  : scalar scale method for the PLS branch
+  .run_scale_filter_merge <- function(nt, scale_np, scale_p, combo_label) {
 
     branch_out <- list(
       metadata              = shared$metadata,
@@ -828,7 +865,7 @@ run_DIpreprocess <- function(
         missing_by_group     = missing_by_group,
         missing_any_group    = missing_any_group,
         missing_include_qc   = missing_include_qc,
-        impute_method      = impute_method,
+        impute_method        = impute_method,
         impute_method_post_drift = impute_method_post_drift,
         positive_only        = positive_only,
         correct_drift        = correct_drift,
@@ -837,13 +874,13 @@ run_DIpreprocess <- function(
         spline_spar_limit    = spline_spar_limit,
         correct_on_log       = correct_on_log,
         min_qc_per_batch     = min_qc_per_batch,
-        normalize_method     = norm_m,     # combination-specific
+        normalize_method     = nt$norm_m,   # combination-specific
         normalize_ref_sample = normalize_ref_sample,
         normalize_qc_method  = normalize_qc_method,
-        transform_method     = trans_m,    # combination-specific
+        transform_method     = nt$trans_m,  # combination-specific
         vsn_cores            = vsn_cores,
-        scale_nonpls         = scale_nonpls,
-        scale_pls            = scale_pls,
+        scale_nonpls         = scale_np,    # combination-specific
+        scale_pls            = scale_p,     # combination-specific
         rsd_threshold        = rsd_threshold,
         rsd_qc_type          = rsd_qc_type,
         variance_percentile  = variance_percentile,
@@ -856,73 +893,35 @@ run_DIpreprocess <- function(
       error           = NULL
     )
 
-    t_branch <- proc.time()[["elapsed"]]
-    df       <- shared$data_corrected
-    metadata <- as.data.frame(shared$metadata)   # use snapshotted metadata
+    # Propagate norm+transform failures immediately
+    if (!is.null(nt$error)) {
+      branch_out$error <- nt$error
+      return(structure(branch_out, class = c("run_DIpreprocess", "list")))
+    }
+
+    t_branch  <- proc.time()[["elapsed"]]
+    df_norm   <- nt$df_norm
+    df_trans  <- nt$df_trans
+    metadata  <- as.data.frame(shared$metadata)
     meta_snap <- shared$metadata
     qc_rows   <- meta_snap$Group_ == "QC"
 
     tryCatch({
 
       # =======================================================================
-      # 6. NORMALIZATION
-      # =======================================================================
-
-      msg(sprintf("  [%s] Step 6: Normalizing (%s)...", combo_label, norm_m))
-
-      if (norm_m == "none") {
-        df_norm <- df
-      } else {
-        norm_result <- run_normalize(
-          x              = df,
-          metadata       = metadata,
-          method         = norm_m,
-          factor_col     = norm_factor_col,
-          ref_sample     = normalize_ref_sample,
-          qc_normalize   = normalize_qc_method,
-          group_col      = "Group_",
-          qc_types       = "QC",   # meta_snap$Group_ is already recoded to "QC"
-          sample_id_col  = "Sample",
-          verbose        = FALSE
-        )
-        df_norm <- norm_result$data
-      }
-
-      # =======================================================================
-      # 7. TRANSFORMATION
-      # =======================================================================
-
-      msg(sprintf("  [%s] Step 7: Transforming (%s)...", combo_label, trans_m))
-
-      if (trans_m == "none") {
-        df_trans <- df_norm
-      } else {
-        trans_result <- run_transform(
-          x         = df_norm,
-          method    = trans_m,
-          metadata  = metadata,
-          group_col = "Group_",   # already recoded: all QC types -> "QC"
-          qc_types  = "QC",
-          num_cores = vsn_cores,
-          verbose   = FALSE
-        )
-        df_trans <- trans_result$data
-      }
-
-      # =======================================================================
       # 8. SCALING (two parallel branches)
       # =======================================================================
 
       msg(sprintf("  [%s] Step 8: Scaling (NONPLS='%s', PLS='%s')...",
-                  combo_label, scale_nonpls, scale_pls))
+                  combo_label, scale_np, scale_p))
 
       .scale_branch <- function(data, method) {
         if (method == "none") return(as.data.frame(data))
         run_scale(x = data, method = method, verbose = FALSE)$data
       }
 
-      df_nonpls <- .scale_branch(df_trans, scale_nonpls)
-      df_pls    <- .scale_branch(df_trans, scale_pls)
+      df_nonpls <- .scale_branch(df_trans, scale_np)
+      df_pls    <- .scale_branch(df_trans, scale_p)
 
       # =======================================================================
       # 9. QUALITY FILTERING
@@ -933,11 +932,8 @@ run_DIpreprocess <- function(
         combo_label, rsd_threshold * 100, variance_percentile, scale_filter_ref
       ))
 
-      # .filter_branch now returns its track entries rather than
-      # trying to write them into branch_out directly (which silently wrote
-      # to a local copy and discarded the result).
       .filter_branch <- function(data, branch_name) {
-        local_track <- branch_out$track   # snapshot; additions appended here
+        local_track <- branch_out$track
 
         rsd_res <- run_filterRSD(
           x        = data,
@@ -1081,7 +1077,7 @@ run_DIpreprocess <- function(
           ))
       }
 
-      # ponytail: harmonisation tracking only applies when both branches exist
+      # harmonisation tracking only applies when both branches exist
       # (scale_filter_ref == "auto"); the per-branch tracking inside the "auto"
       # block already handles its own case.
 
@@ -1185,12 +1181,11 @@ run_DIpreprocess <- function(
 
   if (!is_multi) {
 
-    # ------------------------------------------------------------------
     # Single combination - original return shape
-    # ------------------------------------------------------------------
     msg("Step 6-10: Normalization -> Transformation -> Scaling -> Filtering -> Merge...")
 
-    out <- .run_branch(normalize_method, transform_method, combo_names)
+    nt  <- .run_norm_trans(normalize_method, transform_method)
+    out <- .run_scale_filter_merge(nt, scale_nonpls, scale_pls, combo_names)
 
     # Back-fill parameters with the full original call
     out$parameters <- list(
@@ -1206,7 +1201,7 @@ run_DIpreprocess <- function(
       missing_by_group     = missing_by_group,
       missing_any_group    = missing_any_group,
       missing_include_qc   = missing_include_qc,
-      impute_method      = impute_method,
+      impute_method        = impute_method,
       positive_only        = positive_only,
       correct_drift        = correct_drift,
       remove_uncorrected   = remove_uncorrected,
@@ -1238,16 +1233,37 @@ run_DIpreprocess <- function(
 
   } else {
 
-    # ------------------------------------------------------------------
-    # Multiple combinations - named list of run_DIpreprocess objects
-    # ------------------------------------------------------------------
-    results <- vector("list", nrow(combos))
+    # Multiple combinations - named list of run_DIpreprocess objects.
+    # Norm+transform is cached per unique (norm, trans) pair; scale/filter/merge
+    # runs once per full (norm, trans, scale_np, scale_p) combination.
+
+    nt_grid <- unique(combos[, c("norm", "trans"), drop = FALSE])
+    nt_keys <- paste(nt_grid$norm, nt_grid$trans, sep = "_")
+
+    msg(sprintf(
+      "\nRunning %d norm+transform pair(s), then fanning out to %d full combination(s)...",
+      nrow(nt_grid), nrow(combos)
+    ))
+
+    # Cache norm+transform to avoid re-running for each scale variant
+    nt_cache        <- vector("list", nrow(nt_grid))
+    names(nt_cache) <- nt_keys
+
+    for (i in seq_len(nrow(nt_grid))) {
+      msg(sprintf("\n--- Norm+Transform %d/%d: %s ---", i, nrow(nt_grid), nt_keys[i]))
+      nt_cache[[nt_keys[i]]] <- .run_norm_trans(nt_grid$norm[i], nt_grid$trans[i])
+    }
+
+    results        <- vector("list", nrow(combos))
     names(results) <- combo_names
 
     for (i in seq_len(nrow(combos))) {
-      nm  <- combo_names[i]
+      nm     <- combo_names[i]
+      nt_key <- paste(combos$norm[i], combos$trans[i], sep = "_")
       msg(sprintf("\n--- Combination %d/%d: %s ---", i, nrow(combos), nm))
-      results[[nm]] <- .run_branch(combos$norm[i], combos$trans[i], nm)
+      results[[nm]] <- .run_scale_filter_merge(
+        nt_cache[[nt_key]], combos$scale_np[i], combos$scale_p[i], nm
+      )
     }
 
     elapsed_total <- proc.time()[["elapsed"]] - t_start
@@ -1266,10 +1282,10 @@ run_DIpreprocess <- function(
 
     structure(
       results,
-      class          = c("run_DIpreprocess_multi", "list"),
+      class           = c("run_DIpreprocess_multi", "list"),
       elapsed_seconds = elapsed_total,
-      combos         = combos,
-      shared         = shared
+      combos          = combos,
+      shared          = shared
     )
   }
 }
