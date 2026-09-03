@@ -36,8 +36,25 @@
 #'   Required for drift correction. Default: \code{"Batch"}.
 #' @param injection_col Character. Column in \code{metadata} containing injection
 #'   order (integer). Required for drift correction. Default: \code{"InjectionSequence"}.
-#' @param norm_factor_col Character. Column in \code{metadata} containing
-#'   external normalization factors. Default: \code{"Normalization"}.
+#' @param norm_factor_col Character or \code{NULL}. Column in \code{metadata}
+#'   containing sample-specific normalization factors (e.g. creatinine
+#'   concentrations for urine). Default: \code{NULL}.
+#'
+#'   \strong{Auto-detection behaviour:} When a column name is supplied the
+#'   function validates it \emph{before} running any preprocessing:
+#'   \itemize{
+#'     \item Column must exist in \code{metadata} and be numeric.
+#'     \item Every \emph{non-QC} sample must have a non-\code{NA} value
+#'       (QC samples such as \code{"EQC"}, \code{"SQC"}, \code{"QC"} are
+#'       permitted to be \code{NA}).
+#'   }
+#'   If all checks pass, \code{normalize_method} is \strong{automatically
+#'   overridden} to \code{"specific_factor"} and the supplied column values
+#'   are used for normalization — any value passed in \code{normalize_method}
+#'   is ignored with a message. If the column is absent or invalid, a warning
+#'   is issued and \code{normalize_method} is used unchanged.
+#'
+#'   Set to \code{NULL} (default) to rely entirely on \code{normalize_method}.
 #' @param subject_id_col Character. Column in \code{metadata} containing
 #'   subject identifiers for technical-replicate merging. Default: \code{"SubjectID"}.
 #' @param outliers Character vector or \code{NULL}. Row names of \code{x}
@@ -100,11 +117,23 @@
 #' @param rsd_threshold Numeric \[0, 1\]. QC-RSD threshold. Default: \code{0.3}.
 #' @param rsd_qc_type Character. QC type for RSD (\code{"EQC"}, \code{"SQC"}, \code{"QC"}).
 #' @param variance_percentile Numeric \[0, 100\]. Percentile to filter. Default: \code{10}.
-#' @param scale_filter_ref Character. Harmonisation strategy.
+#' @param scale_filter_ref Character. Feature harmonisation strategy after
+#'   independent per-branch quality filtering (RSD + variance).
 #' \itemize{
-#'   \item \code{"auto"}: Keep intersection of both branches.
-#'   \item \code{"NONPLS"}: Apply NONPLS filters to both.
-#'   \item \code{"PLS"}: Apply PLS filters to both.
+#'   \item \code{"auto"}: Filter each branch independently, then keep only the
+#'     intersection — features that passed quality filters in \emph{both}
+#'     NONPLS and PLS. Ensures identical feature sets across branches.
+#'   \item \code{"NONPLS"}: Use the NONPLS branch as the reference. Features
+#'     that survive NONPLS quality filtering are applied to \emph{both}
+#'     branches, regardless of what PLS filtering would have removed.
+#'   \item \code{"PLS"}: Use the PLS branch as the reference. Features that
+#'     survive PLS quality filtering are applied to \emph{both} branches,
+#'     regardless of what NONPLS filtering would have removed.
+#'   \item \code{"none"}: No cross-branch harmonisation. Each branch retains
+#'     whatever features survive its own quality filtering independently.
+#'     \code{data_nonpls} and \code{data_pls} may therefore contain
+#'     \emph{different} feature sets. \code{features_final} is set to the
+#'     union of both sets.
 #' }
 #' @param merge_replicates Logical. Average technical replicates. Default: \code{FALSE}.
 #' @param track Character vector or \code{NULL}. Feature names to monitor across 
@@ -255,7 +284,7 @@ run_DIpreprocess <- function(
     qc_types         = c("QC", "SQC", "EQC"),
     batch_col        = "Batch",
     injection_col    = "InjectionSequence",
-    norm_factor_col  = "Normalization",
+    norm_factor_col  = NULL,
     subject_id_col   = "SubjectID",
 
     # - Outlier removal -------------------------------------------------------
@@ -349,20 +378,49 @@ run_DIpreprocess <- function(
 
   # Method-specific pre-flight checks -----------------------------------------
 
-  if ("specific_factor" %in% tolower(normalize_method)) {
-    if (!norm_factor_col %in% colnames(metadata))
-      stop(sprintf(
-        paste0("normalize_method = 'specific_factor' requires a metadata column ",
-               "named '%s' (set via norm_factor_col), but it was not found.\n",
-               "  Available columns: %s"),
-        norm_factor_col, paste(colnames(metadata), collapse = ", ")
-      ))
-    if (!is.numeric(metadata[[norm_factor_col]]))
-      stop(sprintf(
-        "normalize_method = 'specific_factor': column '%s' must be numeric.",
-        norm_factor_col
-      ))
+  # norm_factor_col auto-detection: validate the column and, if good, override
+  # normalize_method to "specific_factor". QC samples may have NA values.
+  if (!is.null(norm_factor_col)) {
+    if (!norm_factor_col %in% colnames(metadata)) {
+      warning(sprintf(
+        "norm_factor_col '%s' not found in metadata; ignoring it and using normalize_method = '%s'.",
+        norm_factor_col, paste(normalize_method, collapse = ", ")
+      ), call. = FALSE)
+      norm_factor_col <- NULL
+    } else if (!is.numeric(metadata[[norm_factor_col]])) {
+      warning(sprintf(
+        "norm_factor_col '%s' is not numeric; ignoring it and using normalize_method = '%s'.",
+        norm_factor_col, paste(normalize_method, collapse = ", ")
+      ), call. = FALSE)
+      norm_factor_col <- NULL
+    } else {
+      # Require all non-QC samples to have a value
+      if (group_col %in% colnames(metadata)) {
+        is_non_qc  <- !metadata[[group_col]] %in% qc_types
+        is_na_norm <- is.na(metadata[[norm_factor_col]])
+        if (any(is_non_qc & is_na_norm)) {
+          bad_samps <- rownames(metadata)[is_non_qc & is_na_norm]
+          if (length(bad_samps) == 0L) bad_samps <- which(is_non_qc & is_na_norm)
+          stop(sprintf(
+            "norm_factor_col '%s' has missing values (NA) for non-QC sample(s). Check: %s",
+            norm_factor_col, paste(head(bad_samps, 5), collapse = ", ")
+          ))
+        }
+      }
+      # Valid — auto-switch to specific_factor normalization
+      if (!all(normalize_method == "specific_factor")) {
+        message(sprintf(
+          "norm_factor_col '%s' provided and valid — overriding normalize_method ('%s') to 'specific_factor'.",
+          norm_factor_col, paste(normalize_method, collapse = ", ")
+        ))
+        normalize_method <- "specific_factor"
+      }
+    }
   }
+
+  # Guard: if "specific_factor" was requested explicitly, norm_factor_col must exist
+  if ("specific_factor" %in% tolower(normalize_method) && is.null(norm_factor_col))
+    stop("normalize_method = 'specific_factor' requires 'norm_factor_col' to be specified.")
 
   # Determine multi-method mode -----------------------------------------------
   is_multi <- length(normalize_method) > 1L || length(transform_method) > 1L ||
@@ -424,8 +482,8 @@ run_DIpreprocess <- function(
       stop("'metadata' must be a data frame.")
     if (nrow(x) != nrow(metadata))
       stop("nrow(x) != nrow(metadata).")
-    if (!scale_filter_ref %in% c("auto", "NONPLS", "PLS"))
-      stop("'scale_filter_ref' must be one of: 'auto', 'NONPLS', 'PLS'.")
+    if (!scale_filter_ref %in% c("auto", "NONPLS", "PLS", "none"))
+      stop("'scale_filter_ref' must be one of: 'auto', 'NONPLS', 'PLS', 'none'.")
     if (!group_col %in% colnames(metadata))
       stop(sprintf("group_col '%s' not found in metadata.", group_col))
 
@@ -452,20 +510,6 @@ run_DIpreprocess <- function(
         stop(sprintf(
           "Duplicate sample IDs in '%s'. Duplicates: %s",
           sample_id_col, paste(head(unique(dups), 5), collapse = ", ")
-        ))
-      }
-    }
-
-    if (norm_factor_col %in% colnames(metadata) && group_col %in% colnames(metadata)) {
-      is_non_qc   <- !metadata[[group_col]] %in% qc_types
-      is_na_norm  <- is.na(metadata[[norm_factor_col]])
-      if (any(is_non_qc & is_na_norm)) {
-        bad_samps <- rownames(metadata)[is_non_qc & is_na_norm]
-        if (is.null(bad_samps) || length(bad_samps) == 0L)
-          bad_samps <- which(is_non_qc & is_na_norm)
-        stop(sprintf(
-          "Missing values (NA) in '%s' for non-QC samples. Check: %s",
-          norm_factor_col, paste(head(bad_samps, 5), collapse = ", ")
         ))
       }
     }
@@ -533,11 +577,12 @@ run_DIpreprocess <- function(
       stringsAsFactors  = FALSE,
       row.names         = rownames(metadata)
     )
-    # Preserve the user-specified normalization factor column under its original
-    # name so that run_normalize(factor_col = norm_factor_col) can find it.
-    meta_snap[[norm_factor_col]] <- suppressWarnings(
-      as.numeric(.meta_col(norm_factor_col))
-    )
+    # Preserve the normalization factor column (if provided) so that
+    # run_normalize(factor_col = norm_factor_col) can find it in meta_snap.
+    if (!is.null(norm_factor_col))
+      meta_snap[[norm_factor_col]] <- suppressWarnings(
+        as.numeric(.meta_col(norm_factor_col))
+      )
     shared$metadata <- meta_snap
 
     qc_rows     <- meta_snap$Group_ == "QC"
@@ -1060,7 +1105,7 @@ run_DIpreprocess <- function(
             "[%s] No features passed quality filtering (NONPLS branch).", combo_label
           ))
 
-      } else {  # "PLS"
+      } else if (scale_filter_ref == "PLS") {
         filt_pls <- .filter_branch(df_pls, "PLS")
 
         if (!is.null(track)) branch_out$track <- filt_pls$track
@@ -1075,19 +1120,55 @@ run_DIpreprocess <- function(
           stop(sprintf(
             "[%s] No features passed quality filtering (PLS branch).", combo_label
           ))
+
+      } else {  # "none" — each branch keeps its own surviving features; no harmonisation
+        filt_nonpls <- .filter_branch(df_nonpls, "NONPLS")
+        filt_pls    <- .filter_branch(df_pls,    "PLS")
+
+        if (!is.null(track)) {
+          combined_track <- unique(rbind(filt_nonpls$track, filt_pls$track))
+          branch_out$track <- combined_track
+        }
+
+        branch_out$dimensions <- .record_dim(branch_out$dimensions,
+          sprintf("[%s] After NONPLS RSD filter", combo_label), filt_nonpls$rsd)
+        branch_out$dimensions <- .record_dim(branch_out$dimensions,
+          sprintf("[%s] After NONPLS variance filter", combo_label), filt_nonpls$final)
+        branch_out$dimensions <- .record_dim(branch_out$dimensions,
+          sprintf("[%s] After PLS RSD filter", combo_label), filt_pls$rsd)
+        branch_out$dimensions <- .record_dim(branch_out$dimensions,
+          sprintf("[%s] After PLS variance filter", combo_label), filt_pls$final)
+
+        features_nonpls <- colnames(filt_nonpls$final)
+        features_pls    <- colnames(filt_pls$final)
+
+        if (length(features_nonpls) == 0L && length(features_pls) == 0L)
+          stop(sprintf(
+            "[%s] No features passed quality filtering in either branch.", combo_label
+          ))
+
+        # Union used for features_final and for subsetting data_normalized / data_transformed
+        features_final <- union(features_nonpls, features_pls)
       }
 
       # harmonisation tracking only applies when both branches exist
       # (scale_filter_ref == "auto"); the per-branch tracking inside the "auto"
       # block already handles its own case.
 
-      msg(sprintf("  [%s] Final feature set: %d feature(s).", combo_label, length(features_final)))
+      if (scale_filter_ref == "none") {
+        msg(sprintf("  [%s] Final feature set: %d (NONPLS), %d (PLS) feature(s) [no harmonisation].",
+                    combo_label, length(features_nonpls), length(features_pls)))
+        branch_out$data_nonpls <- filt_nonpls$final
+        branch_out$data_pls    <- filt_pls$final
+      } else {
+        msg(sprintf("  [%s] Final feature set: %d feature(s).", combo_label, length(features_final)))
+        branch_out$data_nonpls <- df_nonpls[, features_final, drop = FALSE]
+        branch_out$data_pls    <- df_pls[,    features_final, drop = FALSE]
+      }
 
-      branch_out$data_nonpls     <- df_nonpls[, features_final, drop = FALSE]
-      branch_out$data_pls        <- df_pls[,    features_final, drop = FALSE]
-      branch_out$data_normalized <- as.data.frame(df_norm)[,  features_final, drop = FALSE]
+      branch_out$data_normalized  <- as.data.frame(df_norm)[,  features_final, drop = FALSE]
       branch_out$data_transformed <- as.data.frame(df_trans)[, features_final, drop = FALSE]
-      branch_out$features_final  <- features_final
+      branch_out$features_final   <- features_final
 
       branch_out$dimensions <- .record_dim(branch_out$dimensions,
         sprintf("[%s] Final (NONPLS)", combo_label), branch_out$data_nonpls)

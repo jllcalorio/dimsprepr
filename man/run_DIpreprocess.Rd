@@ -12,7 +12,7 @@ run_DIpreprocess(
   qc_types = c("QC", "SQC", "EQC"),
   batch_col = "Batch",
   injection_col = "InjectionSequence",
-  norm_factor_col = "Normalization",
+  norm_factor_col = NULL,
   subject_id_col = "SubjectID",
   outliers = NULL,
   missing_threshold = 0.2,
@@ -67,8 +67,25 @@ Required for drift correction. Default: \code{"Batch"}.}
 \item{injection_col}{Character. Column in \code{metadata} containing injection
 order (integer). Required for drift correction. Default: \code{"InjectionSequence"}.}
 
-\item{norm_factor_col}{Character. Column in \code{metadata} containing
-external normalization factors. Default: \code{"Normalization"}.}
+\item{norm_factor_col}{Character or \code{NULL}. Column in \code{metadata}
+containing sample-specific normalization factors (e.g. creatinine
+concentrations for urine). Default: \code{NULL}.
+
+\strong{Auto-detection behaviour:} When a column name is supplied the
+function validates it \emph{before} running any preprocessing:
+\itemize{
+\item Column must exist in \code{metadata} and be numeric.
+\item Every \emph{non-QC} sample must have a non-\code{NA} value
+(QC samples such as \code{"EQC"}, \code{"SQC"}, \code{"QC"} are
+permitted to be \code{NA}).
+}
+If all checks pass, \code{normalize_method} is \strong{automatically
+overridden} to \code{"specific_factor"} and the supplied column values
+are used for normalization — any value passed in \code{normalize_method}
+is ignored with a message. If the column is absent or invalid, a warning
+is issued and \code{normalize_method} is used unchanged.
+
+Set to \code{NULL} (default) to rely entirely on \code{normalize_method}.}
 
 \item{subject_id_col}{Character. Column in \code{metadata} containing
 subject identifiers for technical-replicate merging. Default: \code{"SubjectID"}.}
@@ -157,11 +174,23 @@ every element of \code{scale_nonpls} (Cartesian product).}
 
 \item{variance_percentile}{Numeric [0, 100]. Percentile to filter. Default: \code{10}.}
 
-\item{scale_filter_ref}{Character. Harmonisation strategy.
+\item{scale_filter_ref}{Character. Feature harmonisation strategy after
+independent per-branch quality filtering (RSD + variance).
 \itemize{
-\item \code{"auto"}: Keep intersection of both branches.
-\item \code{"NONPLS"}: Apply NONPLS filters to both.
-\item \code{"PLS"}: Apply PLS filters to both.
+\item \code{"auto"}: Filter each branch independently, then keep only the
+intersection — features that passed quality filters in \emph{both}
+NONPLS and PLS. Ensures identical feature sets across branches.
+\item \code{"NONPLS"}: Use the NONPLS branch as the reference. Features
+that survive NONPLS quality filtering are applied to \emph{both}
+branches, regardless of what PLS filtering would have removed.
+\item \code{"PLS"}: Use the PLS branch as the reference. Features that
+survive PLS quality filtering are applied to \emph{both} branches,
+regardless of what NONPLS filtering would have removed.
+\item \code{"none"}: No cross-branch harmonisation. Each branch retains
+whatever features survive its own quality filtering independently.
+\code{data_nonpls} and \code{data_pls} may therefore contain
+\emph{different} feature sets. \code{features_final} is set to the
+union of both sets.
 }}
 
 \item{merge_replicates}{Logical. Average technical replicates. Default: \code{FALSE}.}
