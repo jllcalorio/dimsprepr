@@ -11,14 +11,14 @@ run_transform(
   metadata = NULL,
   group_col = "Group",
   qc_types = c("QC", "SQC", "EQC"),
-  num_cores = 1,
   verbose = TRUE
 )
 
 \method{print}{run_transform}(x, ...)
 }
 \arguments{
-\item{x}{Object to print.}
+\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
+For \code{print()}, a \code{run_transform} object.}
 
 \item{method}{Character. Transformation method to apply. Options:
 \itemize{
@@ -40,8 +40,6 @@ Default: "Group".}
 
 \item{qc_types}{Character vector. QC group labels. Default: c("QC", "SQC", "EQC").}
 
-\item{num_cores}{Integer or "max". Cores for VSN. Default: 1.}
-
 \item{verbose}{Logical. Print progress. Default: TRUE.}
 
 \item{...}{Ignored.}
@@ -58,38 +56,85 @@ Applies various transformation methods to stabilize variance and reduce
 heteroscedasticity in metabolomics data.
 }
 \details{
-\strong{log2/log10}: Logarithmic compression. A shift is added for non-positive values.
+Transformations reduce heteroscedasticity and right skew so that fold
+changes become additive (van den Berg et al., 2006).
 
-\strong{sqrt/cbrt}: Power transformations. A shift is added for negative values.
+\strong{log2/log10}: Logarithmic compression. If the data contain non-positive
+values, a global shift of \code{abs(min(x)) + 1} is added first (reported in
+\code{shift_applied}).
 
-\strong{clr}: Centered log-ratio. Maps compositional data to real space.
+\strong{sqrt/cbrt}: Power transformations. A shift of \code{abs(min(x))} is added for
+negative values.
 
-\strong{arcsin_sqrt}: For proportion data in [0, 1].
+\strong{clr}: Centered log-ratio (Aitchison, 1982): \code{log(x)} minus the per-sample
+mean of \code{log(x)}. Maps compositional data to real space.
 
-\strong{vsn}: Model-based variance stabilization. Requires \pkg{vsn} and \pkg{BiocParallel}.
+\strong{arcsin_sqrt}: For proportion data in [0, 1]; errors if the (shifted)
+maximum exceeds 1.
 
-\strong{glog}: Generalized logarithm via \pkg{pmp}. Requires metadata with QC labels.
+\strong{vsn}: Model-based variance stabilization (Huber et al., 2002) via
+\code{\link[vsn:vsn2]{vsn::vsn2()}}. Requires \pkg{vsn}.
+Falls back to \code{log10} with a warning if the fit fails.
+
+\strong{glog}: Generalized logarithm (Parsons et al., 2007) via
+\code{\link[pmp:glog_transformation]{pmp::glog_transformation()}}, with the transformation parameter optimised
+on QC samples. Requires \code{metadata} with QC labels in \code{group_col}. Falls back
+to \code{log10} with a warning if the fit fails.
 }
 \examples{
-\donttest{
-set.seed(937)
-x <- matrix(abs(rnorm(80 * 40, mean = 100, sd = 50)), nrow = 80, ncol = 40)
-colnames(x) <- paste0("Feature", 1:40)
+data(dims_data)
+raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+x <- run_mvimpute(raw[, 1:20], verbose = FALSE)$data
 
-result <- run_transform(x, method = "log2")
-result
+res <- run_transform(x, method = "log10")
+res
+range(res$data)
+
+# glog uses QC samples, so it needs metadata
+\donttest{
+data(dims_metadata)
+run_transform(x, method = "glog", metadata = dims_metadata, verbose = FALSE)
 }
 }
 \references{
-Huber, W., et al. (2002). Bioinformatics, 18(Suppl 1), S96-S104.
-https://doi.org/10.1093/bioinformatics/18.suppl_1.s96
+Aitchison, J. (1982). The statistical analysis of compositional data.
+\emph{Journal of the Royal Statistical Society: Series B}, 44(2), 139-177.
+\doi{10.1111/j.2517-6161.1982.tb01195.x}
 
-Parsons, H.M., et al. (2007). BMC Bioinformatics, 8, 234.
-https://doi.org/10.1186/1471-2105-8-234
+Huber, W., von Heydebreck, A., Sultmann, H., Poustka, A., & Vingron, M.
+(2002). Variance stabilization applied to microarray data calibration and
+to the quantification of differential expression. \emph{Bioinformatics},
+18(Suppl 1), S96-S104. \doi{10.1093/bioinformatics/18.suppl_1.s96}
+
+Parsons, H.M., Ludwig, C., Gunther, U.L., & Viant, M.R. (2007). Improved
+classification accuracy in 1- and 2-dimensional NMR metabolomics data using
+the variance stabilising generalised logarithm transformation.
+\emph{BMC Bioinformatics}, 8, 234. \doi{10.1186/1471-2105-8-234}
+
+van den Berg, R.A., Hoefsloot, H.C.J., Westerhuis, J.A., Smilde, A.K., &
+van der Werf, M.J. (2006). Centering, scaling, and transformations:
+improving the biological information content of metabolomics data.
+\emph{BMC Genomics}, 7, 142. \doi{10.1186/1471-2164-7-142}
+
+Jankevics, A., Lloyd, G.R., & Weber, R.J.M. (2025). \emph{pmp: Peak Matrix
+Processing and signal batch correction for metabolomics datasets}.
+R package. \doi{10.18129/B9.bioc.pmp}
 }
 \seealso{
-\code{\link{run_DIpreprocess}}
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} for the full pipeline, \code{\link[=run_scale]{run_scale()}} for the
+step that usually follows.
+
+Other preprocessing steps:
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
+\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
+\code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filtermissing]{run_filtermissing()}},
+\code{\link[=run_filtervariance]{run_filtervariance()}},
+\code{\link[=run_mvimpute]{run_mvimpute()}},
+\code{\link[=run_normalize]{run_normalize()}},
+\code{\link[=run_scale]{run_scale()}}
 }
 \author{
 John Lennon L. Calorio
 }
+\concept{preprocessing steps}

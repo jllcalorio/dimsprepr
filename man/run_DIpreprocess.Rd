@@ -2,6 +2,10 @@
 % Please edit documentation in R/run_DIpreprocess.R
 \name{run_DIpreprocess}
 \alias{run_DIpreprocess}
+\alias{print.run_DIpreprocess}
+\alias{summary.run_DIpreprocess}
+\alias{print.run_DIpreprocess_multi}
+\alias{summary.run_DIpreprocess_multi}
 \title{Direct-Injection Metabolomics Preprocessing Pipeline}
 \usage{
 run_DIpreprocess(
@@ -32,28 +36,37 @@ run_DIpreprocess(
   normalize_ref_sample = NULL,
   normalize_qc_method = "none",
   transform_method = "log10",
-  vsn_cores = 1L,
   scale_nonpls = "auto",
   scale_pls = "pareto",
   rsd_threshold = 0.3,
-  rsd_qc_type = "EQC",
+  rsd_qc_type = "QC",
   variance_percentile = 10,
-  scale_filter_ref = "auto",
   merge_replicates = FALSE,
   track = NULL,
   verbose = TRUE
 )
+
+\method{print}{run_DIpreprocess}(x, ...)
+
+\method{summary}{run_DIpreprocess}(object, ...)
+
+\method{print}{run_DIpreprocess_multi}(x, ...)
+
+\method{summary}{run_DIpreprocess_multi}(object, ...)
 }
 \arguments{
 \item{x}{Matrix or data frame. Numeric feature data with \strong{samples in rows}
 and \strong{features in columns}. All values should be non-negative raw intensities;
-zeros are treated as missing internally.}
+zeros are treated as missing internally.
+For \code{print()}, a \code{run_DIpreprocess} or \code{run_DIpreprocess_multi} object.}
 
-\item{metadata}{Data frame. Sample metadata with \code{nrow(metadata) == nrow(x)}.
-At minimum, the group column (default \code{"Group"}) must be present.}
+\item{metadata}{Data frame. Sample metadata with \code{nrow(metadata) == nrow(x)},
+in the same row order as \code{x}. At minimum, the group column (default
+\code{"Group"}) must be present.}
 
 \item{sample_id_col}{Character. Column in \code{metadata} containing unique
-sample identifiers that match \code{rownames(x)}. Default: \code{"Sample"}.}
+sample identifiers; they become the row names of every output. Default:
+\code{"Sample"}.}
 
 \item{group_col}{Character. Column in \code{metadata} containing group labels.
 Default: \code{"Group"}.}
@@ -61,155 +74,175 @@ Default: \code{"Group"}.}
 \item{qc_types}{Character vector. Group labels that identify QC samples.
 Default: \code{c("QC", "SQC", "EQC")}.}
 
-\item{batch_col}{Character. Column in \code{metadata} containing batch numbers.
-Required for drift correction. Default: \code{"Batch"}.}
+\item{batch_col}{Character. Column in \code{metadata} containing batch labels
+(numeric or character). Required for drift correction. Default: \code{"Batch"}.}
 
-\item{injection_col}{Character. Column in \code{metadata} containing injection
-order (integer). Required for drift correction. Default: \code{"InjectionSequence"}.}
+\item{injection_col}{Character. Column in \code{metadata} containing the numeric
+injection order (unique values). Required for drift correction. Default:
+\code{"InjectionSequence"}.}
 
 \item{norm_factor_col}{Character or \code{NULL}. Column in \code{metadata}
 containing sample-specific normalization factors (e.g. creatinine
-concentrations for urine). Default: \code{NULL}.
+concentrations or osmolality for urine). Default: \code{NULL}.
 
 \strong{Auto-detection behaviour:} When a column name is supplied the
 function validates it \emph{before} running any preprocessing:
 \itemize{
 \item Column must exist in \code{metadata} and be numeric.
 \item Every \emph{non-QC} sample must have a non-\code{NA} value
-(QC samples such as \code{"EQC"}, \code{"SQC"}, \code{"QC"} are
-permitted to be \code{NA}).
+(QC samples are permitted to be \code{NA}).
 }
 If all checks pass, \code{normalize_method} is \strong{automatically
 overridden} to \code{"specific_factor"} and the supplied column values
-are used for normalization — any value passed in \code{normalize_method}
-is ignored with a message. If the column is absent or invalid, a warning
-is issued and \code{normalize_method} is used unchanged.
-
-Set to \code{NULL} (default) to rely entirely on \code{normalize_method}.}
+are used for normalization; any value passed in \code{normalize_method}
+is ignored with a message. If the column is absent or not numeric, a
+warning is issued and \code{normalize_method} is used unchanged.}
 
 \item{subject_id_col}{Character. Column in \code{metadata} containing
 subject identifiers for technical-replicate merging. Default: \code{"SubjectID"}.}
 
-\item{outliers}{Character vector or \code{NULL}. Row names of \code{x}
-to remove before processing. Default: \code{NULL}.}
+\item{outliers}{Character vector or \code{NULL}. Sample identifiers (row names
+after applying \code{sample_id_col}) to remove before processing. Default: \code{NULL}.}
 
-\item{missing_threshold}{Numeric [0, 1]. Missing value threshold. Default: \code{0.2}.}
+\item{missing_threshold}{Numeric [0, 1]. Passed to \code{\link[=run_filtermissing]{run_filtermissing()}}
+as \code{threshold}. Default: \code{0.2}.}
 
-\item{missing_by_group}{Logical. If \code{TRUE}, assess per group. Default: \code{TRUE}.}
+\item{missing_by_group}{Logical. If \code{TRUE}, assess missingness per group.
+Default: \code{TRUE}.}
 
 \item{missing_any_group}{Logical. Only used when \code{missing_by_group = TRUE}.
 If \code{TRUE} (default), a feature is retained if its missingness is below
 the threshold in at least one group (Modified 80\% Rule). If \code{FALSE},
 it must satisfy the threshold in all groups.}
 
-\item{missing_include_qc}{Logical. If \code{TRUE}, include QC samples. Default: \code{FALSE}.}
+\item{missing_include_qc}{Logical. If \code{TRUE}, include QC samples when
+assessing missingness. Default: \code{FALSE}.}
 
-\item{impute_method}{Numeric > 0. Fraction of the smallest positive value
-per feature used for imputation. Default: \code{0.2}.}
+\item{impute_method}{Imputation method passed to \code{\link[=run_mvimpute]{run_mvimpute()}} as
+\code{method}: a fraction (e.g. \code{0.2} = one fifth of the smallest positive
+value per feature), \code{"quantileregression"}, a \pkg{mice} method, or
+\code{"none"}. Default: \code{0.2}.}
 
-\item{impute_method_post_drift}{Missing value imputation after signal drift and batch correction.
-If \code{NULL} (default), takes on the value of \code{impute_method}.}
+\item{impute_method_post_drift}{Imputation method for any missing values
+remaining (or introduced) after drift correction. If \code{NULL} (default),
+takes on the value of \code{impute_method}.}
 
-\item{positive_only}{Logical. If \code{TRUE}, imputation only considers positive values. Default: \code{TRUE}.}
+\item{positive_only}{Logical. If \code{TRUE}, the minimum used by fractional
+imputation only considers positive values. Default: \code{TRUE}.}
 
-\item{correct_drift}{Logical. If \code{TRUE}, apply QCRSC correction. Default: \code{TRUE}.}
+\item{correct_drift}{Logical. If \code{TRUE}, apply QCRSC drift and batch
+correction via \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}}. Default: \code{TRUE}.}
 
 \item{remove_uncorrected}{Logical. If \code{TRUE}, remove features QCRSC
 could not correct. Default: \code{FALSE}.}
 
-\item{spline_smooth}{Numeric [0, 1]. Smoothing parameter. Default: \code{0}.}
+\item{spline_smooth}{Numeric [0, 1]. QCRSC spline smoothing parameter;
+\code{0} selects it by cross-validation. Default: \code{0}.}
 
-\item{spline_spar_limit}{Numeric vector. Lower/upper bounds for spline. Default: \code{c(-1.5, 1.5)}.}
+\item{spline_spar_limit}{Numeric vector of length 2. Lower/upper bounds of
+the smoothing parameter searched during cross-validation.
+Default: \code{c(-1.5, 1.5)}.}
 
-\item{correct_on_log}{Logical. If \code{TRUE}, fit on log-transformed data. Default: \code{TRUE}.}
+\item{correct_on_log}{Logical. If \code{TRUE}, fit the QC spline on
+log-transformed data. Default: \code{TRUE}.}
 
-\item{min_qc_per_batch}{Integer. Minimum QC samples per batch. Default: \code{5}.}
+\item{min_qc_per_batch}{Integer. Minimum QC samples per batch for a feature
+to be corrected. Default: \code{5}.}
 
-\item{normalize_method}{Character or character vector. One or more normalization
-methods to apply. When multiple methods are supplied every method is paired
-with every element of \code{transform_method} (Cartesian product).
+\item{normalize_method}{Character or character vector. One or more
+normalization methods (see \code{\link[=run_normalize]{run_normalize()}} for details). When multiple
+methods are supplied every method is paired with every element of
+\code{transform_method} (Cartesian product).
 \itemize{
 \item \code{"sum"}: Normalizes by sum.
 \item \code{"median"}: Normalizes by median.
 \item \code{"specific_factor"}: Uses external factors in \code{norm_factor_col}.
-\item \code{"pqn_global"}: PQN using a global reference.
-\item \code{"pqn_reference"}: PQN using \code{normalize_ref_sample}.
+\item \code{"pqn_global"}: PQN using the median of all samples as reference.
+\item \code{"pqn_reference"}: PQN using \code{normalize_ref_sample} as reference.
 \item \code{"pqn_group"}: PQN using pooled QC samples as reference.
-\item \code{"quantile"}: Quantile normalization.
+\item \code{"pqn"}, \code{"quantile"}: PQN via \pkg{pmp} (\code{"quantile"} is an
+alias kept for backward compatibility; it is not quantile normalization).
+\item \code{"col_rel_abundance"}, \code{"row_rel_abundance"}: relative abundance.
 \item \code{"none"}: No normalization.
 }
 Default: \code{"median"}.}
 
-\item{normalize_ref_sample}{Character. Reference sample name for PQN. Default: \code{NULL}.}
+\item{normalize_ref_sample}{Character. Reference sample identifier for
+\code{"pqn_reference"}. Default: \code{NULL}.}
 
-\item{normalize_qc_method}{Character. QC normalization when using factors.
-One of \code{"mean"}, \code{"median"}, \code{"none"}. Default: \code{"none"}.}
+\item{normalize_qc_method}{Character. How QC samples are scaled when
+sample factors are used: \code{"mean"}, \code{"median"}, or \code{"none"}. Default: \code{"none"}.}
 
-\item{transform_method}{Character or character vector. One or more transformation
-methods to apply. When multiple methods are supplied every method is paired
-with every element of \code{normalize_method} (Cartesian product).
-\itemize{
-\item \code{"log2"}, \code{"log10"}, \code{"sqrt"}, \code{"cbrt"},
-\code{"clr"}, \code{"vsn"}, \code{"glog"}, or \code{"none"}.
-}
+\item{transform_method}{Character or character vector. One or more
+transformation methods (see \code{\link[=run_transform]{run_transform()}}): \code{"log2"}, \code{"log10"},
+\code{"sqrt"}, \code{"cbrt"}, \code{"clr"}, \code{"arcsin_sqrt"}, \code{"vsn"}, \code{"glog"}, or
+\code{"none"}. When multiple methods are supplied every method is paired with
+every element of \code{normalize_method} (Cartesian product).
 Default: \code{"log10"}.}
 
-\item{vsn_cores}{Integer or \code{"max"}. Cores for VSN. Default: \code{1}.}
+\item{scale_nonpls}{Character or character vector. One or more scaling
+methods (see \code{\link[=run_scale]{run_scale()}}) for the NONPLS branch, intended for PCA,
+clustering, and univariate tests. When multiple methods are supplied,
+each is paired with every element of \code{scale_pls}. Only the varying scale
+components are appended to the combination name (e.g.
+\code{median_log10_auto} when only \code{scale_nonpls} varies). Default: \code{"auto"}.}
 
-\item{scale_nonpls}{Character or character vector. One or more scaling methods
-for the NONPLS branch (\code{"auto"}, \code{"pareto"}, \code{"mean"},
-\code{"none"}). When multiple methods are supplied, each is paired with
-every element of \code{scale_pls} (Cartesian product). Only the varying
-scale components are appended to the combination name (e.g.
-\code{median_log10_auto} when only \code{scale_nonpls} varies).}
+\item{scale_pls}{Character or character vector. One or more scaling
+methods for the PLS branch, intended for PLS-DA/OPLS-DA. Default:
+\code{"pareto"}.}
 
-\item{scale_pls}{Character or character vector. One or more scaling methods
-for the PLS branch (\code{"pareto"}, \code{"auto"}, \code{"mean"},
-\code{"none"}). When multiple methods are supplied, each is paired with
-every element of \code{scale_nonpls} (Cartesian product).}
+\item{rsd_threshold}{Numeric [0, 1]. Features with QC RSD at or above this
+value are removed (\code{\link[=run_filterRSD]{run_filterRSD()}}). Default: \code{0.3}.}
 
-\item{rsd_threshold}{Numeric [0, 1]. QC-RSD threshold. Default: \code{0.3}.}
+\item{rsd_qc_type}{Character. QC type used for the RSD filter: \code{"QC"} (all
+\code{qc_types}), or one specific label such as \code{"EQC"} or \code{"SQC"}.
+Default: \code{"QC"}.}
 
-\item{rsd_qc_type}{Character. QC type for RSD (\code{"EQC"}, \code{"SQC"}, \code{"QC"}).}
+\item{variance_percentile}{Numeric [0, 100]. Features in this bottom
+percentile of variance are removed (\code{\link[=run_filtervariance]{run_filtervariance()}}). Default: \code{10}.}
 
-\item{variance_percentile}{Numeric [0, 100]. Percentile to filter. Default: \code{10}.}
-
-\item{scale_filter_ref}{Character. Feature harmonisation strategy after
-independent per-branch quality filtering (RSD + variance).
-\itemize{
-\item \code{"auto"}: Filter each branch independently, then keep only the
-intersection — features that passed quality filters in \emph{both}
-NONPLS and PLS. Ensures identical feature sets across branches.
-\item \code{"NONPLS"}: Use the NONPLS branch as the reference. Features
-that survive NONPLS quality filtering are applied to \emph{both}
-branches, regardless of what PLS filtering would have removed.
-\item \code{"PLS"}: Use the PLS branch as the reference. Features that
-survive PLS quality filtering are applied to \emph{both} branches,
-regardless of what NONPLS filtering would have removed.
-\item \code{"none"}: No cross-branch harmonisation. Each branch retains
-whatever features survive its own quality filtering independently.
-\code{data_nonpls} and \code{data_pls} may therefore contain
-\emph{different} feature sets. \code{features_final} is set to the
-union of both sets.
-}}
-
-\item{merge_replicates}{Logical. Average technical replicates. Default: \code{FALSE}.}
+\item{merge_replicates}{Logical. Average technical replicates (non-QC rows
+sharing a \code{subject_id_col} value). Default: \code{FALSE}.}
 
 \item{track}{Character vector or \code{NULL}. Feature names to monitor across
 preprocessing steps. If a tracked feature is removed, the step and reason
-(e.g., missingness percentage, RSD value) are recorded. Default: \code{NULL}.}
+(e.g., missingness percentage, RSD value) are recorded in \verb{$track}.
+Default: \code{NULL}.}
 
 \item{verbose}{Logical. Print progress. Default: \code{TRUE}.}
+
+\item{...}{Ignored.}
+
+\item{object}{A \code{run_DIpreprocess} or \code{run_DIpreprocess_multi} object.}
 }
 \value{
 \describe{
-\item{Single combination (all four method arguments are scalar)}{A named
-list of class \code{run_DIpreprocess} — identical to the original
-behaviour.}
-\item{Multiple combinations (any method argument is a vector of length
-> 1)}{A named list of class \code{run_DIpreprocess_multi}.  Each element
-is a \code{run_DIpreprocess} object. Element names follow the pattern
-\code{<normalize>_<transform>} when only normalization/transformation vary
+\item{Single combination (all four method arguments are scalar)}{A
+list of class \code{run_DIpreprocess} with elements:
+\describe{
+\item{\code{data_nonpls}, \code{data_pls}}{Final data for the NONPLS and PLS
+branches (scaled with \code{scale_nonpls} / \code{scale_pls}).}
+\item{\code{data_raw}, \code{data_missing_filtered}, \code{data_imputed},
+\code{data_corrected}, \code{data_normalized}, \code{data_transformed}}{Data
+after each step (\code{data_normalized}/\code{data_transformed} are
+restricted to \code{features_final}).}
+\item{\code{data_nonpls_merged}, \code{data_pls_merged}, \code{metadata_merged}}{
+Replicate-merged data and metadata, or \code{NULL}.}
+\item{\code{metadata}}{Standardized metadata with columns \code{Sample},
+\code{Group}, \code{Group_} (QC types collapsed to \code{"QC"}), \code{Batch},
+\code{InjectionSequence}, \code{SubjectID}.}
+\item{\code{features_final}}{Features that passed every filter.}
+\item{\code{uncorrected_features}}{Features QCRSC could not correct.}
+\item{\code{dimensions}}{Data frame of samples x features after each step.}
+\item{\code{track}}{Data frame recording why tracked features were removed.}
+\item{\code{parameters}}{List of parameter values used.}
+\item{\code{elapsed_seconds}, \code{error}}{Run time, and the error message
+(\code{NULL} on success).}
+}}
+\item{Multiple combinations (any method argument has length > 1)}{A
+named list of class \code{run_DIpreprocess_multi}. Each element is a
+\code{run_DIpreprocess} object. Element names follow the pattern
+\verb{<normalize>_<transform>} when only normalization/transformation vary
 (e.g. \code{sum_log10}), or include scale suffixes when scaling varies
 (e.g. \code{median_log10_auto}, \code{median_log10_auto_pareto}).
 Scale components are appended only for those arguments that have more
@@ -220,134 +253,122 @@ the \code{shared} attribute of the returned list.}
 }
 \description{
 Runs a complete, sequential preprocessing pipeline for metabolomics data by
-orchestrating the individual \code{run_*} functions of \pkg{dimsprepr}. Steps
+orchestrating the individual \verb{run_*} functions of \pkg{dimsprepr}. Steps
 execute in a fixed, reproducible order regardless of argument arrangement.
 
-When \code{normalize_method}, \code{transform_method}, \code{scale_nonpls},
-and/or \code{scale_pls} are supplied as character vectors with more than one
-element, \strong{all combinations} are computed with three levels of
-deduplication: (1) the steps prior to normalization (validation, outlier
-removal, missing-value filtering, imputation, and drift/batch correction) run
-\strong{only once}; (2) normalization and transformation run \strong{once per
-unique normalize x transform pair}; (3) scaling -> quality filtering ->
-replicate-merging runs \strong{once per full combination}.  The return value
-in this case is a plain \code{list} (class \code{"run_DIpreprocess_multi"})
-whose elements are named \code{<normalize>_<transform>} when only
-normalization or transformation methods vary, or
-\code{<normalize>_<transform>_<scale_nonpls>} /
-\code{<normalize>_<transform>_<scale_nonpls>_<scale_pls>} when scaling
-methods also vary, and each element holds a standard
-\code{run_DIpreprocess} object.
+When \code{normalize_method}, \code{transform_method}, \code{scale_nonpls}, and/or
+\code{scale_pls} are supplied as character vectors with more than one element,
+\strong{all combinations} are computed with three levels of deduplication:
+(1) the steps prior to normalization (validation, outlier removal,
+missing-value filtering, imputation, and drift/batch correction) run
+\strong{only once}; (2) normalization, transformation, and quality filtering
+run \strong{once per unique normalize x transform pair}; (3) scaling and
+replicate merging run \strong{once per full combination}. The return value
+in this case is a list of class \code{"run_DIpreprocess_multi"} whose elements
+are standard \code{run_DIpreprocess} objects (see Value for their names).
 }
 \details{
 \strong{Preprocessing Workflow (Fixed Order):}
 \enumerate{
 \item Input validation
 \item Outlier removal
-\item Missing-value filtering (\code{\link{run_filtermissing}})
-\item Missing-value imputation (\code{\link{run_mvimpute}})
-\item Signal drift correction (\code{\link{run_driftBatchCorrect}})
-\item \emph{[Per normalize × transform pair]} Normalization
-(\code{\link{run_normalize}})
-\item \emph{[Per normalize × transform pair]} Transformation
-(\code{\link{run_transform}})
-\item \emph{[Per full combination]} Scaling (\code{\link{run_scale}})
-\item \emph{[Per full combination]} Quality filtering
-(\code{\link{run_filterRSD}}, \code{\link{run_filtervariance}})
-\item \emph{[Per full combination]} Common-feature harmonisation &
-replicate merging
+\item Missing-value filtering (\code{\link[=run_filtermissing]{run_filtermissing()}})
+\item Missing-value imputation (\code{\link[=run_mvimpute]{run_mvimpute()}})
+\item Signal drift and batch correction (\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}})
+\item \emph{[Per normalize x transform pair]} Normalization
+(\code{\link[=run_normalize]{run_normalize()}})
+\item \emph{[Per normalize x transform pair]} Transformation
+(\code{\link[=run_transform]{run_transform()}})
+\item \emph{[Per normalize x transform pair]} Quality filtering:
+QC-RSD on the normalized data (\code{\link[=run_filterRSD]{run_filterRSD()}}), then variance on the
+transformed data (\code{\link[=run_filtervariance]{run_filtervariance()}})
+\item \emph{[Per full combination]} Scaling (\code{\link[=run_scale]{run_scale()}}) of the
+NONPLS and PLS branches
+\item \emph{[Per full combination]} Technical-replicate merging
 }
 
-\strong{Deduplication across methods:} When multiple methods are requested,
-Steps 1–5 run only once. Steps 6–7 run once per unique
-\code{normalize_method × transform_method} pair; their output is cached
-and reused across all scale combinations that share the same pair.
-Steps 8–10 run once per full
-\code{normalize × transform × scale_nonpls × scale_pls} combination.
+Quality filtering is done \emph{before} scaling because the RSD of
+mean-centred data and the variance of auto-scaled data (always 1) carry no
+information. Both branches therefore share the same feature set,
+\code{features_final}.
+
+The workflow follows the QC-based guidelines of Broadhurst et al. (2018)
+and the DIMS batch-correction strategy of Kirwan et al. (2013).
 }
 \note{
 \strong{Zero Handling:} The pipeline automatically converts all \code{0} values in
 \code{x} to \code{NA} prior to analysis.
 
-\strong{Multi-method pre-flight checks:} When vectors are supplied for any
-of \code{normalize_method}, \code{transform_method}, \code{scale_nonpls}, or
-\code{scale_pls}, the function validates all method-specific requirements
-(e.g. \code{norm_factor_col} for \code{"specific_factor"},
-\code{normalize_ref_sample} for \code{"pqn_reference"}) \emph{before}
-executing any preprocessing step, so errors are surfaced early rather than
-mid-run.
+\strong{Pre-flight checks:} Method names, and method-specific requirements
+(e.g. \code{norm_factor_col} for \code{"specific_factor"}, \code{normalize_ref_sample} for
+\code{"pqn_reference"}), are validated \emph{before} any preprocessing step, so
+errors surface early rather than mid-run. Errors raised inside a step are
+caught: the function returns an object whose \verb{$error} holds the message.
 }
 \examples{
-\dontrun{
-set.seed(42)
-n_s <- 80; n_f <- 100
-x <- matrix(abs(rnorm(n_s * n_f, 500, 150)), nrow = n_s, ncol = n_f)
-colnames(x) <- paste0("Feature", seq_len(n_f))
-x[sample(length(x), 400)] <- 0
+data(dims_data)
+data(dims_metadata)
 
-meta <- data.frame(
-  Sample            = paste0("S", seq_len(n_s)),
-  Group             = rep(c("Control", "Treatment", "QC"), c(30, 30, 20)),
-  Batch             = rep(1:2, each = 40),
-  InjectionSequence = seq_len(n_s),
-  SubjectID         = c(paste0("BIO", seq_len(60)), rep(NA, 20)),
-  stringsAsFactors  = FALSE
-)
-rownames(x) <- meta$Sample
+res <- run_DIpreprocess(dims_data, dims_metadata, correct_drift = FALSE,
+                        verbose = FALSE)
+res
+summary(res)
+dim(res$data_nonpls)
 
-# --- Single combination (original behaviour) ---
-result_single <- run_DIpreprocess(
-  x                = x,
-  metadata         = meta,
-  normalize_method = "pqn_group",
-  transform_method = "log2",
-  correct_drift    = FALSE
-)
-class(result_single)          # "run_DIpreprocess"
-dim(result_single$data_nonpls)
+# Full default pipeline, including QCRSC drift correction (slower: loads pmp)
+\donttest{
+res_drift <- run_DIpreprocess(dims_data, dims_metadata, verbose = FALSE)
+res_drift$parameters$correct_drift
+}
 
-# --- Multiple transform methods ---
-result_multi <- run_DIpreprocess(
-  x                = x,
-  metadata         = meta,
-  normalize_method = "median",
-  transform_method = c("log10", "vsn"),
-  correct_drift    = FALSE
-)
-class(result_multi)           # "run_DIpreprocess_multi"
-names(result_multi)           # "median_log10"  "median_vsn"
-
-# --- Full Cartesian product (norm × transform) ---
-result_cart <- run_DIpreprocess(
-  x                = x,
-  metadata         = meta,
-  normalize_method = c("sum", "median"),
-  transform_method = c("log10", "vsn"),
-  correct_drift    = FALSE
-)
-names(result_cart)
-# "sum_log10"  "sum_vsn"  "median_log10"  "median_vsn"
-
-# --- scale_nonpls as a vector (norm+transform computed once, scaled twice) ---
-result_scale <- run_DIpreprocess(
-  x                = x,
-  metadata         = meta,
-  normalize_method = "median",
+# Multi-method mode: steps 1-5 run once, then every combination
+multi <- run_DIpreprocess(
+  dims_data, dims_metadata,
+  normalize_method = c("median", "pqn_group"),
   transform_method = "log10",
   scale_nonpls     = c("auto", "pareto"),
-  correct_drift    = FALSE
+  correct_drift    = FALSE,
+  verbose          = FALSE
 )
-names(result_scale)
-# "median_log10_auto"  "median_log10_pareto"
-}
+names(multi)
+multi
 }
 \references{
-Kirwan, J.A., et al. (2013). \emph{Analytical and Bioanalytical Chemistry}, 405, 5147-5157.
+Broadhurst, D., Goodacre, R., Reinke, S.N., Kuligowski, J., Wilson, I.D.,
+Lewis, M.R., & Dunn, W.B. (2018). Guidelines and considerations for the use
+of system suitability and quality control samples in mass spectrometry
+assays applied in untargeted clinical metabolomic studies.
+\emph{Metabolomics}, 14(6), 72. \doi{10.1007/s11306-018-1367-3}
+
+Kirwan, J.A., Broadhurst, D.I., Davidson, R.L., & Viant, M.R. (2013).
+Characterising and correcting batch variation in an automated direct
+infusion mass spectrometry (DIMS) metabolomics workflow.
+\emph{Analytical and Bioanalytical Chemistry}, 405(15), 5147-5157.
+\doi{10.1007/s00216-013-6856-7}
+
+van den Berg, R.A., Hoefsloot, H.C.J., Westerhuis, J.A., Smilde, A.K., &
+van der Werf, M.J. (2006). Centering, scaling, and transformations:
+improving the biological information content of metabolomics data.
+\emph{BMC Genomics}, 7, 142. \doi{10.1186/1471-2164-7-142}
+
+See the individual step functions for method-specific references.
 }
 \seealso{
-\code{\link{run_filtermissing}}, \code{\link{run_mvimpute}},
-\code{\link{run_driftBatchCorrect}}, \code{\link{run_normalize}}
+\code{\link[=plot_beforeafter]{plot_beforeafter()}} and \code{\link[=plot_dist_beforeafter]{plot_dist_beforeafter()}} accept a
+\code{run_DIpreprocess} result directly; \link{dims_data} and \link{dims_metadata} are
+example inputs.
+
+Other preprocessing steps:
+\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
+\code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filtermissing]{run_filtermissing()}},
+\code{\link[=run_filtervariance]{run_filtervariance()}},
+\code{\link[=run_mvimpute]{run_mvimpute()}},
+\code{\link[=run_normalize]{run_normalize()}},
+\code{\link[=run_scale]{run_scale()}},
+\code{\link[=run_transform]{run_transform()}}
 }
 \author{
 John Lennon L. Calorio
 }
+\concept{preprocessing steps}

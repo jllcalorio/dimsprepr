@@ -8,6 +8,7 @@
 #' @param x Matrix or data frame. Numeric data with samples in rows and features in columns.
 #'   Missing values should be represented as NA. Zero values can optionally be treated
 #'   as missing via the `zero_as_missing` parameter.
+#'   For `print()`, a `run_filtermissing` object.
 #' @param metadata Data frame. Sample metadata with number of rows equal to nrow(x).
 #'   Must contain a column specified by `group_col` when `filter_by_group = TRUE`.
 #' @param threshold Numeric. Maximum proportion of missing values allowed (0-1).
@@ -87,15 +88,17 @@
 #' \strong{QC sample handling}
 #'
 #' When \code{include_QC = FALSE}, samples whose group labels match
-#' \code{qc_types} are excluded from missingness calculations. This is
-#' recommended because QC samples often exhibit different missingness
-#' patterns compared with biological samples.
+#' \code{qc_types} are excluded from missingness calculations in both modes
+#' (global filtering needs \code{group_col} in \code{metadata} for this; if
+#' it is absent, all samples are used). This is recommended because QC
+#' samples often exhibit different missingness patterns compared with
+#' biological samples.
 #'
 #' @author John Lennon L. Calorio
 #'
 #' @references
 #' Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control, Batch Correction,
-#' Exploration & Data Cleaning (Version 2.1) Zendono. \doi{10.5281/zenodo.16824822}.
+#' Exploration & Data Cleaning (Version 2.1). Zenodo. \doi{10.5281/zenodo.16824822}.
 #' Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
 #'
 #' Smilde, A. K., van der Werf, M. J., Bijlsma, S., van der Werff-van der Vat, B. J.,
@@ -110,26 +113,24 @@
 #' metabolomics to reduce the mask effect in data analysis. Front. Mol. Biosci. 2:4.
 #' \doi{10.3389/fmolb.2015.00004}
 #'
-#' @seealso \code{\link{run_DIpreprocess}}
+#' @family preprocessing steps
+#' @seealso [run_DIpreprocess()] for the full pipeline, [run_mvimpute()] for
+#'   the step that usually follows.
 #'
 #' @export
 #'
 #' @examples
-#' \donttest{
-#' set.seed(302)
-#' x <- matrix(abs(rnorm(100 * 50, mean = 100)), nrow = 100, ncol = 50)
-#' x[sample(length(x), 300)] <- 0
-#' x[sample(length(x), 200)] <- NA
-#' colnames(x) <- paste0("Feature", 1:50)
+#' data(dims_data)
+#' data(dims_metadata)
 #'
-#' metadata <- data.frame(
-#'   Sample = paste0("S", 1:100),
-#'   Group = rep(c("Control", "Treatment", "QC"), c(40, 40, 20))
-#' )
+#' # Modified 80% rule: keep features present in >= 80% of any one group
+#' res <- run_filtermissing(dims_data, dims_metadata, threshold = 0.2)
+#' res
+#' res$features_removed
 #'
-#' result <- run_filtermissing(x, metadata, threshold = 0.3)
-#' result
-#' }
+#' # Classic 80% rule across all non-QC samples
+#' run_filtermissing(dims_data, dims_metadata, filter_by_group = FALSE,
+#'                   verbose = FALSE)
 run_filtermissing <- function(
     x,
     metadata,
@@ -172,8 +173,9 @@ run_filtermissing <- function(
     }
   }
 
-  # Determine which samples to use for missingness calculation
-  if (include_QC || !filter_by_group) {
+  # Determine which samples to use for missingness calculation.
+  # QC exclusion needs group labels; without group_col (global mode) all rows count.
+  if (include_QC || !group_col %in% colnames(metadata)) {
     assessment_indices <- seq_len(nrow(x_matrix))
   } else {
     assessment_indices <- which(!metadata[[group_col]] %in% qc_types)
@@ -186,23 +188,20 @@ run_filtermissing <- function(
   if (filter_by_group) {
     groups <- unique(metadata[[group_col]][assessment_indices])
 
-    missing_by_group <- sapply(groups, function(g) {
-      group_indices <- which(metadata[[group_col]] == g &
-                               seq_len(nrow(metadata)) %in% assessment_indices)
-      if (length(group_indices) == 0) return(rep(0, ncol(x_matrix)))
-      colMeans(is.na(x_matrix[group_indices, , drop = FALSE]))
-    })
+    # features x groups matrix (matrix() keeps the shape for 1 feature / 1 group)
+    missing_by_group <- matrix(
+      vapply(groups, function(g) {
+        idx <- assessment_indices[metadata[[group_col]][assessment_indices] %in% g]
+        colMeans(is.na(x_matrix[idx, , drop = FALSE]))
+      }, numeric(ncol(x_matrix))),
+      nrow = ncol(x_matrix), dimnames = list(feature_names, groups)
+    )
 
-    if (is.vector(missing_by_group)) {
-      features_to_keep <- missing_by_group < threshold
+    below_thresh <- missing_by_group < threshold
+    features_to_keep <- if (any_group) {
+      rowSums(below_thresh) > 0L
     } else {
-      # Vectorized: check threshold across groups
-      below_thresh <- missing_by_group < threshold
-      features_to_keep <- if (any_group) {
-        rowSums(below_thresh) > 0L
-      } else {
-        rowSums(below_thresh) == ncol(below_thresh)
-      }
+      rowSums(below_thresh) == ncol(below_thresh)
     }
 
     missingness_summary <- as.data.frame(missing_by_group)
@@ -252,7 +251,6 @@ run_filtermissing <- function(
 }
 
 
-#' @param x Object to print.
 #' @param ... Ignored.
 #' @rdname run_filtermissing
 #' @export

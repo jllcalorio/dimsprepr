@@ -27,7 +27,8 @@ run_driftBatchCorrect(
 \method{print}{run_driftBatchCorrect}(x, ...)
 }
 \arguments{
-\item{x}{Object to print.}
+\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
+For \code{print()}, a \code{run_driftBatchCorrect} object.}
 
 \item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).}
 
@@ -51,17 +52,23 @@ Default: "Group".}
 \item{qc_types}{Character vector. Group labels converted to \code{qc_label} internally.
 Default: c("QC", "SQC", "EQC").}
 
-\item{spline_smooth_param}{Numeric. Smoothing parameter (0-1). Default: 0.}
+\item{spline_smooth_param}{Numeric (0-1). Smoothing parameter (\code{spar})
+of the QC spline. \code{0} (default) chooses it per feature by
+cross-validation; larger values give smoother fits.}
 
-\item{min_QC}{Integer. Minimum QC samples per batch. Default: 5.}
+\item{min_QC}{Integer. Minimum number of QC samples with observed values a
+feature needs in a batch to be corrected; features below it are left
+uncorrected. Default: 5.}
 
-\item{spar_limit}{Numeric vector of length 2. Spline limits. Default: c(-1.5, 1.5).}
+\item{spar_limit}{Numeric vector of length 2. Lower and upper limits of
+\code{spar} searched during cross-validation. Default: c(-1.5, 1.5).}
 
-\item{log_scale}{Logical. Fit on log-transformed data. Default: TRUE.}
+\item{log_scale}{Logical. Fit the spline on log-transformed data. Default: TRUE.}
 
-\item{use_parametric}{Logical. Parametric ComBat adjustment. Default: TRUE.}
+\item{use_parametric}{Logical. Parametric (\code{TRUE}) or non-parametric
+empirical Bayes priors in ComBat. Default: TRUE.}
 
-\item{display_plots}{Logical. Diagnostic plots for ComBat. Default: FALSE.}
+\item{display_plots}{Logical. Draw ComBat's prior diagnostic plots. Default: FALSE.}
 
 \item{verbose}{Logical. Print progress. Default: TRUE.}
 
@@ -72,49 +79,87 @@ A list of class \code{"run_driftBatchCorrect"} containing:
 \item{data}{Corrected data (same class as input \code{x})}
 \item{data_before_correction}{Original data before correction}
 \item{correction_applied}{Logical}
-\item{method_used}{Character}
-\item{uncorrected_features}{Character vector of uncorrected features}
+\item{method_used}{Character: \code{"QCRSC"}, \code{"ComBat"}, or \code{"None"}}
+\item{uncorrected_features}{Character vector of features left unchanged
+(e.g. too few QC values)}
 \item{n_uncorrected}{Integer}
 \item{parameters}{List of parameters}
 }
 \description{
-Applies Quality Control-based Robust Spline Correction (QCRSC) or batch correction
-using ComBat to remove systematic signal drift and batch effects in metabolomics data.
+Applies Quality Control-based Robust Spline Correction (QCRSC) or batch
+correction using ComBat to remove systematic signal drift and batch effects
+in metabolomics data.
 }
 \details{
-\strong{QCRSC} fits smoothing splines through QC intensities across injection order.
-Requires \pkg{pmp}.
+\strong{QCRSC} (Quality Control-based Robust Spline Correction; Kirwan et al.,
+2013) fits, per feature and batch, a smoothing spline through the QC
+intensities against injection order and removes that trend from every
+sample, correcting within-batch drift and between-batch offsets in one
+step. It follows the QC-based correction approach of Dunn et al. (2011). Implemented by \code{\link[pmp:QCRSC]{pmp::QCRSC()}}. QC samples
+must be spread through every batch, starting and ending with a QC, with at
+least 4 (preferably 5 or more) per batch.
 
-\strong{ComBat} uses empirical Bayes for batch correction. Requires \pkg{sva}.
+\strong{ComBat} (\code{batch_corr_only = TRUE}; Johnson et al., 2007) uses
+empirical Bayes location/scale adjustment to remove batch effects without
+using QCs or injection order. Implemented by \code{\link[sva:ComBat]{sva::ComBat()}}. Requires
+\pkg{sva}. ComBat does not accept missing values, so impute first.
+
+Batch labels may be numeric or character.
 }
 \examples{
+data(dims_data)
+data(dims_metadata)
+raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+x <- run_mvimpute(raw[, 1:10], verbose = FALSE)$data
+
+# QC-based drift + batch correction (QCRSC)
+res <- run_driftBatchCorrect(x, dims_metadata, spline_smooth_param = 0.5)
+res
+
+# ComBat batch correction only (requires sva)
 \donttest{
-set.seed(417)
-n <- 60; p <- 30
-x <- matrix(abs(rnorm(n * p, 100, 20)), nrow = n, ncol = p)
-colnames(x) <- paste0("F", seq_len(p))
-
-meta <- data.frame(
-  InjectionSequence = seq_len(n),
-  Batch = rep(1:2, each = 30),
-  Group = rep(c(rep("Sample", 9), "QC"), 6)
-)
-
-# Skip correction (returns unchanged)
-result <- run_driftBatchCorrect(x, meta, perform_correction = FALSE)
-result
+if (requireNamespace("sva", quietly = TRUE)) {
+  run_driftBatchCorrect(x, dims_metadata, batch_corr_only = TRUE,
+                        verbose = FALSE)
+}
 }
 }
 \references{
-Kirwan, J.A., et al. (2013). Analytical and Bioanalytical Chemistry, 405, 5147-5157.
+Dunn, W.B., Broadhurst, D., Begley, P., Zelena, E., Francis-McIntyre, S.,
+Anderson, N., et al. (2011). Procedures for large-scale metabolic profiling
+of serum and plasma using gas chromatography and liquid chromatography
+coupled to mass spectrometry. \emph{Nature Protocols}, 6(7), 1060-1083.
+\doi{10.1038/nprot.2011.335}
+
+Johnson, W.E., Li, C., & Rabinovic, A. (2007). Adjusting batch effects in
+microarray expression data using empirical Bayes methods.
+\emph{Biostatistics}, 8(1), 118-127. \doi{10.1093/biostatistics/kxj037}
+
+Kirwan, J.A., Broadhurst, D.I., Davidson, R.L., & Viant, M.R. (2013).
+Characterising and correcting batch variation in an automated direct
+infusion mass spectrometry (DIMS) metabolomics workflow.
+\emph{Analytical and Bioanalytical Chemistry}, 405(15), 5147-5157.
 \doi{10.1007/s00216-013-6856-7}
 
-Johnson, W.E., et al. (2007). Biostatistics, 8(1), 118-127.
-\doi{10.1093/biostatistics/kxj037}
+Jankevics, A., Lloyd, G.R., & Weber, R.J.M. (2025). \emph{pmp: Peak Matrix
+Processing and signal batch correction for metabolomics datasets}.
+R package. \doi{10.18129/B9.bioc.pmp}
 }
 \seealso{
-\code{\link{run_DIpreprocess}}
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} for the full pipeline, \code{\link[=plot_beforeafter]{plot_beforeafter()}}
+to inspect the correction along the injection order.
+
+Other preprocessing steps:
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
+\code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filtermissing]{run_filtermissing()}},
+\code{\link[=run_filtervariance]{run_filtervariance()}},
+\code{\link[=run_mvimpute]{run_mvimpute()}},
+\code{\link[=run_normalize]{run_normalize()}},
+\code{\link[=run_scale]{run_scale()}},
+\code{\link[=run_transform]{run_transform()}}
 }
 \author{
 John Lennon L. Calorio
 }
+\concept{preprocessing steps}

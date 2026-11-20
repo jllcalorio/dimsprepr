@@ -21,7 +21,10 @@ run_filtermissing(
 \method{print}{run_filtermissing}(x, ...)
 }
 \arguments{
-\item{x}{Object to print.}
+\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
+Missing values should be represented as NA. Zero values can optionally be treated
+as missing via the \code{zero_as_missing} parameter.
+For \code{print()}, a \code{run_filtermissing} object.}
 
 \item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).
 Must contain a column specified by \code{group_col} when \code{filter_by_group = TRUE}.}
@@ -118,30 +121,28 @@ threshold is met across all groups.
 \strong{QC sample handling}
 
 When \code{include_QC = FALSE}, samples whose group labels match
-\code{qc_types} are excluded from missingness calculations. This is
-recommended because QC samples often exhibit different missingness
-patterns compared with biological samples.
+\code{qc_types} are excluded from missingness calculations in both modes
+(global filtering needs \code{group_col} in \code{metadata} for this; if
+it is absent, all samples are used). This is recommended because QC
+samples often exhibit different missingness patterns compared with
+biological samples.
 }
 \examples{
-\donttest{
-set.seed(302)
-x <- matrix(abs(rnorm(100 * 50, mean = 100)), nrow = 100, ncol = 50)
-x[sample(length(x), 300)] <- 0
-x[sample(length(x), 200)] <- NA
-colnames(x) <- paste0("Feature", 1:50)
+data(dims_data)
+data(dims_metadata)
 
-metadata <- data.frame(
-  Sample = paste0("S", 1:100),
-  Group = rep(c("Control", "Treatment", "QC"), c(40, 40, 20))
-)
+# Modified 80\% rule: keep features present in >= 80\% of any one group
+res <- run_filtermissing(dims_data, dims_metadata, threshold = 0.2)
+res
+res$features_removed
 
-result <- run_filtermissing(x, metadata, threshold = 0.3)
-result
-}
+# Classic 80\% rule across all non-QC samples
+run_filtermissing(dims_data, dims_metadata, filter_by_group = FALSE,
+                  verbose = FALSE)
 }
 \references{
 Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control, Batch Correction,
-Exploration & Data Cleaning (Version 2.1) Zendono. \doi{10.5281/zenodo.16824822}.
+Exploration & Data Cleaning (Version 2.1). Zenodo. \doi{10.5281/zenodo.16824822}.
 Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
 
 Smilde, A. K., van der Werf, M. J., Bijlsma, S., van der Werff-van der Vat, B. J.,
@@ -157,8 +158,20 @@ metabolomics to reduce the mask effect in data analysis. Front. Mol. Biosci. 2:4
 \doi{10.3389/fmolb.2015.00004}
 }
 \seealso{
-\code{\link{run_DIpreprocess}}
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} for the full pipeline, \code{\link[=run_mvimpute]{run_mvimpute()}} for
+the step that usually follows.
+
+Other preprocessing steps:
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
+\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
+\code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filtervariance]{run_filtervariance()}},
+\code{\link[=run_mvimpute]{run_mvimpute()}},
+\code{\link[=run_normalize]{run_normalize()}},
+\code{\link[=run_scale]{run_scale()}},
+\code{\link[=run_transform]{run_transform()}}
 }
 \author{
 John Lennon L. Calorio
 }
+\concept{preprocessing steps}

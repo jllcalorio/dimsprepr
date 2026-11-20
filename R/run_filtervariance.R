@@ -6,6 +6,7 @@
 #' safely removed to reduce dimensionality.
 #'
 #' @param x Matrix or data frame. Numeric data with samples in rows and features in columns.
+#'   For `print()`, a `run_filtervariance` object.
 #' @param percentile Numeric. Percentile threshold (0-100) for variance filtering.
 #'   Features in the bottom X percentile of variance are removed. For example,
 #'   10 removes the 10% of features with lowest variance. Default: 10.
@@ -37,27 +38,41 @@
 #' - **Moderate** (10-20%): Standard approach for most studies
 #' - **Aggressive** (20-30%): When high dimensionality is a concern
 #'
+#' Variance filtering is independent of the outcome labels, so it does not
+#' bias downstream tests while reducing the multiple-testing burden
+#' (Hackstadt & Hess, 2009).
+#'
+#' **Apply before scaling.** Auto-scaling sets every feature's variance to 1,
+#' and mean-centering/Pareto scaling distort the ranking, so run this filter on
+#' normalized or transformed data. [run_DIpreprocess()] does this for you.
+#'
+#' Features with zero or non-finite variance are always removed. Features with
+#' variance at or below the percentile cutoff are removed.
+#'
 #' @author John Lennon L. Calorio
 #'
 #' @references
 #' Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control, Batch Correction,
-#' Exploration & Data Cleaning (Version 2.1) Zendono. \doi{10.5281/zenodo.16824822}.
+#' Exploration & Data Cleaning (Version 2.1). Zenodo. \doi{10.5281/zenodo.16824822}.
 #' Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
 #'
-#' @seealso \code{\link{run_DIpreprocess}}
+#' Hackstadt, A.J., & Hess, A.M. (2009). Filtering for increased power for
+#' microarray data analysis. *BMC Bioinformatics*, 10, 11.
+#' \doi{10.1186/1471-2105-10-11}
+#'
+#' @family preprocessing steps
+#' @seealso [run_DIpreprocess()] for the full pipeline.
 #'
 #' @export
 #'
 #' @examples
-#' \donttest{
-#' set.seed(519)
-#' x <- matrix(rnorm(100 * 50, mean = 100, sd = seq(0.1, 25, length.out = 50)),
-#'             nrow = 100, ncol = 50, byrow = TRUE)
-#' colnames(x) <- paste0("Feature", 1:50)
+#' data(dims_data)
+#' raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+#' x <- log10(run_mvimpute(raw, verbose = FALSE)$data)
 #'
-#' result <- run_filtervariance(x, percentile = 10)
-#' result
-#' }
+#' res <- run_filtervariance(x, percentile = 10)
+#' res
+#' head(sort(res$variance_values), 3)
 run_filtervariance <- function(
     x,
     percentile = 10,
@@ -129,7 +144,6 @@ run_filtervariance <- function(
   )
 }
 
-#' @param x Object to print.
 #' @param ... Ignored.
 #' @rdname run_filtervariance
 #' @export

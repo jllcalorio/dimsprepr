@@ -31,11 +31,15 @@ plot_dist_beforeafter(
 \arguments{
 \item{x}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing
 the data \emph{before} transformation. Rows are samples; columns are
-features. Column names may contain special characters.}
+features. Column names may contain special characters. Alternatively, a
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} result: \code{x} then becomes its imputed data
+(\code{$data_imputed}) and \code{y} its final NONPLS data
+(\code{$data_nonpls}), so \code{y} can be omitted.}
 
 \item{y}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing
 the data \emph{after} transformation. Must have the same dimensions and
-column names as \code{x}.}
+column names as \code{x}. Ignored when \code{x} is a
+\code{run_DIpreprocess} result.}
 
 \item{group_by}{Character. Perspective for box plots. \code{"sample"}
 shows one box per sample; \code{"feature"} shows one box per feature.
@@ -118,8 +122,6 @@ Plots can be oriented by sample or by feature. Returns a named list of
 individual \code{ggplot2} objects and a combined \code{gtable} grob.
 }
 \details{
-Plot Distribution Comparison Before and After Data Transformation
-
 \code{x} and \code{y} must share identical row counts, column counts, and
 column names. Row order is assumed to correspond between \code{x} and
 \code{y}.
@@ -131,7 +133,7 @@ plots only; density plots always use the full \code{plot_what} subset.
 
 Box plot items are ordered by median value for readability.
 
-Font sizes follow the same resolution priority as \code{plot_beforeafter}:
+Font sizes follow the same resolution priority as \code{\link[=plot_beforeafter]{plot_beforeafter()}}:
 explicit argument > \code{global_font_size} scaling > \code{base_size}
 derived default.
 
@@ -140,46 +142,32 @@ also returns a named list so individual panels can be extracted,
 re-styled, or exported independently.
 }
 \examples{
-\dontrun{
-set.seed(42)
-n_samples  <- 40
-n_features <- 20
+data(dims_data)
+data(dims_metadata)
+raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+before <- run_mvimpute(raw, verbose = FALSE)$data
+after  <- run_normalize(before, dims_metadata, method = "pqn_group",
+                        verbose = FALSE)$data
 
-x <- as.data.frame(
-  matrix(abs(rnorm(n_samples * n_features, mean = 1000, sd = 300)),
-         nrow = n_samples,
-         dimnames = list(
-           paste0("S", seq_len(n_samples)),
-           paste0("Feature_", seq_len(n_features))
-         ))
-)
-y <- as.data.frame(scale(x))
+# Sample-wise comparison on the log scale
+res <- plot_dist_beforeafter(log10(before), log10(after),
+                             x_label = "Raw", y_label = "PQN", n_random = 15)
 
-# Sample-wise comparison, default settings
-result <- plot_dist_beforeafter(
-  x       = x,
-  y       = y,
-  group_by = "sample"
-)
-
-# Feature-wise, subset of features, classic theme
-result <- plot_dist_beforeafter(
-  x         = x,
-  y         = y,
-  group_by  = "feature",
-  plot_what = paste0("Feature_", 1:10),
-  theme     = "classic"
-)
-
-# Extract individual panels
-result$plot_density_before
-result$plot_box_after
-}
+# Feature-wise, subset of features; panels are returned for re-use
+res <- plot_dist_beforeafter(log10(before), log10(after), group_by = "feature",
+                             plot_what = colnames(before)[1:10],
+                             theme = "classic")
+res$plot_box_after
 
 }
 \seealso{
-\code{\link{run_DIpreprocess}}
+\code{\link[=run_normalize]{run_normalize()}}, \code{\link[=run_transform]{run_transform()}}, and \code{\link[=run_scale]{run_scale()}}, whose
+effects this plot is designed to show.
+
+Other plotting functions:
+\code{\link[=plot_beforeafter]{plot_beforeafter()}}
 }
 \author{
 John Lennon L. Calorio
 }
+\concept{plotting functions}

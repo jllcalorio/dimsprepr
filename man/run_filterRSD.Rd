@@ -10,7 +10,7 @@ run_filterRSD(
   metadata,
   max_rsd = 0.3,
   group_col = "Group",
-  qc_type = "EQC",
+  qc_type = "QC",
   qc_types = c("QC", "SQC", "EQC"),
   verbose = TRUE
 )
@@ -18,7 +18,8 @@ run_filterRSD(
 \method{print}{run_filterRSD}(x, ...)
 }
 \arguments{
-\item{x}{Object to print.}
+\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
+For \code{print()}, a \code{run_filterRSD} object.}
 
 \item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).
 Must contain column specified by \code{group_col} to identify QC samples.}
@@ -33,9 +34,10 @@ Default: "Group".}
 \itemize{
 \item \code{"EQC"}: Extract QC samples (diluted sample pool)
 \item \code{"SQC"}: Sample QC samples (undiluted sample pool)
-\item \code{"QC"}: Any QC sample (use when both EQC and SQC present, or no distinction)
+\item \code{"QC"}: Any QC sample, i.e. every label in \code{qc_types}
+(use when both EQC and SQC are present, or there is no distinction)
 }
-Default: "EQC".}
+Default: "QC".}
 
 \item{qc_types}{Character vector. Group labels that should be treated as QC samples.
 Default: c("QC", "SQC", "EQC").}
@@ -63,7 +65,14 @@ poor analytical reproducibility.
 \details{
 \strong{Relative Standard Deviation (RSD):}
 
-RSD is calculated as: RSD = SD / Mean
+RSD is calculated per feature over the selected QC samples as
+RSD = SD / Mean (missing values ignored). Features whose RSD cannot be
+computed (e.g. no observed QC values) are removed, matching
+\code{\link[pmp:filter_peaks_by_rsd]{pmp::filter_peaks_by_rsd()}}.
+
+\strong{Apply to non-negative intensities}, i.e. before mean-centering or
+scaling; RSD of centred data is meaningless. A warning is issued if any QC
+mean is <= 0.
 
 Also known as coefficient of variation (CV), RSD expresses variability
 as a proportion of the mean, making it scale-independent and suitable
@@ -86,36 +95,50 @@ the same biological matrix. High RSD in QC samples indicates:
 \item Standard: 30\% (0.3) - recommended for most metabolomics studies
 \item Lenient: 40\% (0.4) - when sample size is limited
 }
+
+Broadhurst et al. (2018) recommend removing features with QC RSD above
+20\% (0.2) for untargeted studies, or 30\% (0.3) as a commonly used upper
+limit.
 }
 \examples{
-\donttest{
-set.seed(814)
-x <- matrix(abs(rnorm(100 * 50, mean = 100, sd = 20)),
-            nrow = 100, ncol = 50)
-colnames(x) <- paste0("Feature", 1:50)
+data(dims_data)
+data(dims_metadata)
+raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+x <- run_mvimpute(raw, verbose = FALSE)$data
 
-metadata <- data.frame(
-  Sample = paste0("S", 1:100),
-  Group = c(rep("Control", 40), rep("Treatment", 40),
-            rep("QC", 10), rep("EQC", 10))
-)
-
-result <- run_filterRSD(x, metadata, max_rsd = 0.3, qc_type = "EQC")
-result
-}
+res <- run_filterRSD(x, dims_metadata, max_rsd = 0.2)
+res
+round(head(res$rsd_values), 3)
 }
 \references{
 Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control, Batch Correction,
-Exploration & Data Cleaning (Version 2.1) Zendono. \doi{10.5281/zenodo.16824822}.
+Exploration & Data Cleaning (Version 2.1). Zenodo. \doi{10.5281/zenodo.16824822}.
 Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
 
-Jankevics A, Lloyd GR, Weber RJM (2025). pmp: Peak Matrix Processing and signal
-batch correction for metabolomics datasets. \doi{10.18129/B9.bioc.pmp},
-R package version 1.20.0, \url{https://bioconductor.org/packages/pmp}.
+Broadhurst, D., Goodacre, R., Reinke, S.N., Kuligowski, J., Wilson, I.D.,
+Lewis, M.R., & Dunn, W.B. (2018). Guidelines and considerations for the use
+of system suitability and quality control samples in mass spectrometry
+assays applied in untargeted clinical metabolomic studies.
+\emph{Metabolomics}, 14(6), 72. \doi{10.1007/s11306-018-1367-3}
+
+Jankevics, A., Lloyd, G.R., & Weber, R.J.M. (2025). \emph{pmp: Peak Matrix
+Processing and signal batch correction for metabolomics datasets}.
+R package. \doi{10.18129/B9.bioc.pmp}
 }
 \seealso{
-\code{\link{run_DIpreprocess}}
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} for the full pipeline.
+
+Other preprocessing steps:
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
+\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
+\code{\link[=run_filtermissing]{run_filtermissing()}},
+\code{\link[=run_filtervariance]{run_filtervariance()}},
+\code{\link[=run_mvimpute]{run_mvimpute()}},
+\code{\link[=run_normalize]{run_normalize()}},
+\code{\link[=run_scale]{run_scale()}},
+\code{\link[=run_transform]{run_transform()}}
 }
 \author{
 John Lennon L. Calorio
 }
+\concept{preprocessing steps}

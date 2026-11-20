@@ -53,3 +53,25 @@ test_that(".with_seed restores RNG state", {
 
   expect_equal(before, after)
 })
+
+test_that("method vocabularies are lower-case and unique", {
+  for (v in list(dimsprepr:::.normalize_methods, dimsprepr:::.transform_methods,
+                 dimsprepr:::.scale_methods, dimsprepr:::.plot_themes)) {
+    expect_identical(v, unique(tolower(v)))
+  }
+})
+
+test_that(".resolve_plot_what keeps found features and falls back when none match", {
+  cols <- paste0("F", 1:10)
+  expect_equal(dimsprepr:::.resolve_plot_what("F2", cols), "F2")
+  expect_warning(out <- suppressMessages(dimsprepr:::.resolve_plot_what("zz", cols)),
+                 "Falling back")
+  expect_length(out, 6L)
+  expect_equal(suppressMessages(dimsprepr:::.resolve_plot_what(NULL, cols[1:3])), cols[1:3])
+})
+
+test_that(".build_base_theme accepts every theme and rejects others", {
+  for (th in dimsprepr:::.plot_themes)
+    expect_s3_class(dimsprepr:::.build_base_theme(th, 11, "sans"), "theme")
+  expect_error(dimsprepr:::.build_base_theme("neon", 11, "sans"), "must be one of")
+})

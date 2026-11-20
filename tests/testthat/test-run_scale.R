@@ -63,3 +63,13 @@ test_that("print.run_scale works", {
   res <- run_scale(td$x, method = "auto", verbose = FALSE)
   expect_output(print(res), "Scaling Results")
 })
+
+test_that("svast/xvast need metadata and return finite values", {
+  x <- log10(dims_clean(1:10))
+  expect_error(run_scale(x, "svast", verbose = FALSE), "metadata")
+  for (m in c("svast", "xvast")) {
+    res <- run_scale(x, m, metadata = dims_metadata, verbose = FALSE)
+    expect_true(all(is.finite(res$data)))
+    expect_equal(unname(colMeans(res$data)), rep(0, 10), tolerance = 1e-10)
+  }
+})

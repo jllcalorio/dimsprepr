@@ -48,3 +48,29 @@ test_that("print.run_filtermissing works", {
   res <- run_filtermissing(td$x, td$metadata, verbose = FALSE)
   expect_output(print(res), "Missing Value Filtering")
 })
+
+test_that("global filtering also excludes QC samples when include_QC = FALSE", {
+  x <- matrix(1, nrow = 10, ncol = 2, dimnames = list(NULL, c("bio_ok", "qc_gap")))
+  x[9:10, "qc_gap"] <- NA        # missing only in the two QC rows
+  meta <- data.frame(Group = c(rep("A", 8), "QC", "QC"))
+  ex <- run_filtermissing(x, meta, threshold = 0.1, filter_by_group = FALSE,
+                          include_QC = FALSE, verbose = FALSE)
+  inc <- run_filtermissing(x, meta, threshold = 0.1, filter_by_group = FALSE,
+                           include_QC = TRUE, verbose = FALSE)
+  expect_equal(ex$features_kept, c("bio_ok", "qc_gap"))
+  expect_equal(inc$features_kept, "bio_ok")
+})
+
+test_that("group-wise filtering works with a single feature", {
+  x <- matrix(c(1, 1, NA, NA), ncol = 1, dimnames = list(NULL, "F1"))
+  meta <- data.frame(Group = c("A", "A", "B", "B"))
+  any_g <- run_filtermissing(x, meta, threshold = 0.5, verbose = FALSE)
+  all_g <- run_filtermissing(x, meta, threshold = 0.5, any_group = FALSE, verbose = FALSE)
+  expect_equal(any_g$n_features_after, 1L)
+  expect_equal(all_g$n_features_after, 0L)
+})
+
+test_that("bundled data: almost-empty features are removed", {
+  res <- run_filtermissing(dims_data, dims_metadata, verbose = FALSE)
+  expect_true(all(c("mz_0078", "mz_0079", "mz_0080") %in% res$features_removed))
+})

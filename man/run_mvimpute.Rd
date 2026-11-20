@@ -20,7 +20,9 @@ run_mvimpute(
 \method{print}{run_mvimpute}(x, ...)
 }
 \arguments{
-\item{x}{Object to print.}
+\item{x}{Matrix or data frame. Numeric data with samples in rows and features
+in columns. Missing values should be represented as \code{NA}.
+For \code{print()}, a \code{run_mvimpute} object.}
 
 \item{method}{Numeric or character. Controls the imputation strategy:
 \itemize{
@@ -54,7 +56,7 @@ Default: \code{NA}.}
 
 \item{verbose}{Logical. Print progress messages. Default: \code{TRUE}.}
 
-\item{...}{Ignored.}
+\item{...}{Additional arguments passed to \code{\link[mice:mice]{mice::mice()}}; ignored by \code{print()}.}
 }
 \value{
 A list of class \code{"run_mvimpute"} containing:
@@ -75,36 +77,68 @@ imputation of left-censored data, QRILC), or any method available in
 \strong{Missing Value Imputation Strategies:}
 \enumerate{
 \item \strong{Deterministic (fraction of minimum):} Each missing value is replaced by
-a fraction of the per-feature minimum. Standard in metabolomics for MNAR data.
-\item \strong{Quantile Regression (QRILC):} Models missing values from a
-left-censored distribution. Requires \pkg{imputeLCMD}.
-\item \strong{mice:} Multiple Imputation by Chained Equations. Requires \pkg{mice}.
+a fraction of the per-feature minimum. Standard in metabolomics for
+missing-not-at-random (MNAR) data, where missingness mostly means the
+signal fell below the detection limit (Wei et al., 2018).
+\item \strong{Quantile Regression (QRILC):} Draws missing values from a truncated
+normal distribution estimated by quantile regression on the observed,
+left-censored data (Lazar et al., 2016), via
+\code{\link[imputeLCMD:impute.QRILC]{imputeLCMD::impute.QRILC()}}. Requires \pkg{imputeLCMD}. Note that QRILC
+works on the scale of the data supplied; log-transformed input is
+recommended.
+\item \strong{mice:} Multiple Imputation by Chained Equations (van Buuren &
+Groothuis-Oudshoorn, 2011) via \code{\link[mice:mice]{mice::mice()}}, with a predictor matrix
+from \code{\link[mice:quickpred]{mice::quickpred()}} unless \code{predictorMatrix} is supplied in \code{...}.
+Requires \pkg{mice}. Only the first completed data set is returned.
 }
+
+Wei et al. (2018) compare these strategies on mass spectrometry
+metabolomics data.
 }
 \examples{
-\donttest{
-set.seed(723)
-x <- matrix(abs(rnorm(100 * 50, mean = 100)), nrow = 100, ncol = 50)
-x[sample(length(x), 200)] <- NA
-colnames(x) <- paste0("Feature", 1:50)
+data(dims_data)
+x <- dims_data[, 1:20]
+x[x == 0] <- NA            # zeros are below-detection values
 
-result <- run_mvimpute(x, method = 0.2)
-result
+res <- run_mvimpute(x, method = 0.2)
+res
+head(res$imputed_summary)
+
+# QRILC on log-scale data (requires imputeLCMD)
+if (requireNamespace("imputeLCMD", quietly = TRUE)) {
+  run_mvimpute(log10(x), method = "quantileregression", verbose = FALSE)
 }
 }
 \references{
+Lazar, C., Gatto, L., Ferro, M., Bruley, C., & Burger, T. (2016).
+Accounting for the multiple natures of missing values in label-free
+quantitative proteomics data sets to compare imputation strategies.
+\emph{Journal of Proteome Research}, 15(4), 1116-1125.
+\doi{10.1021/acs.jproteome.5b00981}
+
 Van Buuren, S., & Groothuis-Oudshoorn, K. (2011). mice: Multivariate
 Imputation by Chained Equations in R. \emph{Journal of Statistical Software},
 45(3), 1-67. \doi{10.18637/jss.v045.i03}
 
-Wei, R., et al. (2018). Missing Value Imputation Approach for Mass
-Spectrometry-based Metabolomics Data. \emph{Scientific Reports}, 8(1), 663.
-\doi{10.1038/s41598-017-19120-0}
+Wei, R., Wang, J., Su, M., Jia, E., Chen, S., Chen, T., & Ni, Y. (2018).
+Missing value imputation approach for mass spectrometry-based metabolomics
+data. \emph{Scientific Reports}, 8(1), 663. \doi{10.1038/s41598-017-19120-0}
 }
 \seealso{
-\code{\link{run_DIpreprocess}}, \code{\link[mice]{mice}},
-\code{\link[imputeLCMD]{impute.QRILC}}
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} for the full pipeline, \code{\link[=run_filtermissing]{run_filtermissing()}}
+for the step that usually precedes imputation.
+
+Other preprocessing steps:
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
+\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
+\code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filtermissing]{run_filtermissing()}},
+\code{\link[=run_filtervariance]{run_filtervariance()}},
+\code{\link[=run_normalize]{run_normalize()}},
+\code{\link[=run_scale]{run_scale()}},
+\code{\link[=run_transform]{run_transform()}}
 }
 \author{
 John Lennon L. Calorio
 }
+\concept{preprocessing steps}

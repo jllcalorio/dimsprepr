@@ -10,7 +10,8 @@ run_filtervariance(x, percentile = 10, verbose = TRUE)
 \method{print}{run_filtervariance}(x, ...)
 }
 \arguments{
-\item{x}{Object to print.}
+\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
+For \code{print()}, a \code{run_filtervariance} object.}
 
 \item{percentile}{Numeric. Percentile threshold (0-100) for variance filtering.
 Features in the bottom X percentile of variance are removed. For example,
@@ -54,26 +55,50 @@ Features with very low variance across samples:
 \item \strong{Moderate} (10-20\%): Standard approach for most studies
 \item \strong{Aggressive} (20-30\%): When high dimensionality is a concern
 }
+
+Variance filtering is independent of the outcome labels, so it does not
+bias downstream tests while reducing the multiple-testing burden
+(Hackstadt & Hess, 2009).
+
+\strong{Apply before scaling.} Auto-scaling sets every feature's variance to 1,
+and mean-centering/Pareto scaling distort the ranking, so run this filter on
+normalized or transformed data. \code{\link[=run_DIpreprocess]{run_DIpreprocess()}} does this for you.
+
+Features with zero or non-finite variance are always removed. Features with
+variance at or below the percentile cutoff are removed.
 }
 \examples{
-\donttest{
-set.seed(519)
-x <- matrix(rnorm(100 * 50, mean = 100, sd = seq(0.1, 25, length.out = 50)),
-            nrow = 100, ncol = 50, byrow = TRUE)
-colnames(x) <- paste0("Feature", 1:50)
+data(dims_data)
+raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+x <- log10(run_mvimpute(raw, verbose = FALSE)$data)
 
-result <- run_filtervariance(x, percentile = 10)
-result
-}
+res <- run_filtervariance(x, percentile = 10)
+res
+head(sort(res$variance_values), 3)
 }
 \references{
 Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control, Batch Correction,
-Exploration & Data Cleaning (Version 2.1) Zendono. \doi{10.5281/zenodo.16824822}.
+Exploration & Data Cleaning (Version 2.1). Zenodo. \doi{10.5281/zenodo.16824822}.
 Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
+
+Hackstadt, A.J., & Hess, A.M. (2009). Filtering for increased power for
+microarray data analysis. \emph{BMC Bioinformatics}, 10, 11.
+\doi{10.1186/1471-2105-10-11}
 }
 \seealso{
-\code{\link{run_DIpreprocess}}
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} for the full pipeline.
+
+Other preprocessing steps:
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
+\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
+\code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filtermissing]{run_filtermissing()}},
+\code{\link[=run_mvimpute]{run_mvimpute()}},
+\code{\link[=run_normalize]{run_normalize()}},
+\code{\link[=run_scale]{run_scale()}},
+\code{\link[=run_transform]{run_transform()}}
 }
 \author{
 John Lennon L. Calorio
 }
+\concept{preprocessing steps}

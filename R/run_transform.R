@@ -5,6 +5,7 @@
 #' heteroscedasticity in metabolomics data.
 #'
 #' @param x Matrix or data frame. Numeric data with samples in rows and features in columns.
+#'   For `print()`, a `run_transform` object.
 #' @param method Character. Transformation method to apply. Options:
 #'   \itemize{
 #'     \item \code{"log2"}: Log base 2 transformation
@@ -21,7 +22,6 @@
 #' @param group_col Character. Column in `metadata` with group labels.
 #'   Default: "Group".
 #' @param qc_types Character vector. QC group labels. Default: c("QC", "SQC", "EQC").
-#' @param num_cores Integer or "max". Cores for VSN. Default: 1.
 #' @param verbose Logical. Print progress. Default: TRUE.
 #'
 #' @return A list of class `"run_transform"` containing:
@@ -31,39 +31,76 @@
 #'   \item{parameters}{List of parameters}
 #'
 #' @details
-#' **log2/log10**: Logarithmic compression. A shift is added for non-positive values.
+#' Transformations reduce heteroscedasticity and right skew so that fold
+#' changes become additive (van den Berg et al., 2006).
 #'
-#' **sqrt/cbrt**: Power transformations. A shift is added for negative values.
+#' **log2/log10**: Logarithmic compression. If the data contain non-positive
+#' values, a global shift of `abs(min(x)) + 1` is added first (reported in
+#' `shift_applied`).
 #'
-#' **clr**: Centered log-ratio. Maps compositional data to real space.
+#' **sqrt/cbrt**: Power transformations. A shift of `abs(min(x))` is added for
+#' negative values.
 #'
-#' **arcsin_sqrt**: For proportion data in \[0, 1\].
+#' **clr**: Centered log-ratio (Aitchison, 1982): `log(x)` minus the per-sample
+#' mean of `log(x)`. Maps compositional data to real space.
 #'
-#' **vsn**: Model-based variance stabilization. Requires \pkg{vsn} and \pkg{BiocParallel}.
+#' **arcsin_sqrt**: For proportion data in \[0, 1\]; errors if the (shifted)
+#' maximum exceeds 1.
 #'
-#' **glog**: Generalized logarithm via \pkg{pmp}. Requires metadata with QC labels.
+#' **vsn**: Model-based variance stabilization (Huber et al., 2002) via
+#' [vsn::vsn2()]. Requires \pkg{vsn}.
+#' Falls back to `log10` with a warning if the fit fails.
+#'
+#' **glog**: Generalized logarithm (Parsons et al., 2007) via
+#' [pmp::glog_transformation()], with the transformation parameter optimised
+#' on QC samples. Requires `metadata` with QC labels in `group_col`. Falls back
+#' to `log10` with a warning if the fit fails.
 #'
 #' @author John Lennon L. Calorio
 #'
 #' @references
-#' Huber, W., et al. (2002). Bioinformatics, 18(Suppl 1), S96-S104.
-#' https://doi.org/10.1093/bioinformatics/18.suppl_1.s96
+#' Aitchison, J. (1982). The statistical analysis of compositional data.
+#' *Journal of the Royal Statistical Society: Series B*, 44(2), 139-177.
+#' \doi{10.1111/j.2517-6161.1982.tb01195.x}
 #'
-#' Parsons, H.M., et al. (2007). BMC Bioinformatics, 8, 234.
-#' https://doi.org/10.1186/1471-2105-8-234
+#' Huber, W., von Heydebreck, A., Sultmann, H., Poustka, A., & Vingron, M.
+#' (2002). Variance stabilization applied to microarray data calibration and
+#' to the quantification of differential expression. *Bioinformatics*,
+#' 18(Suppl 1), S96-S104. \doi{10.1093/bioinformatics/18.suppl_1.s96}
 #'
-#' @seealso \code{\link{run_DIpreprocess}}
+#' Parsons, H.M., Ludwig, C., Gunther, U.L., & Viant, M.R. (2007). Improved
+#' classification accuracy in 1- and 2-dimensional NMR metabolomics data using
+#' the variance stabilising generalised logarithm transformation.
+#' *BMC Bioinformatics*, 8, 234. \doi{10.1186/1471-2105-8-234}
+#'
+#' van den Berg, R.A., Hoefsloot, H.C.J., Westerhuis, J.A., Smilde, A.K., &
+#' van der Werf, M.J. (2006). Centering, scaling, and transformations:
+#' improving the biological information content of metabolomics data.
+#' *BMC Genomics*, 7, 142. \doi{10.1186/1471-2164-7-142}
+#'
+#' Jankevics, A., Lloyd, G.R., & Weber, R.J.M. (2025). *pmp: Peak Matrix
+#' Processing and signal batch correction for metabolomics datasets*.
+#' R package. \doi{10.18129/B9.bioc.pmp}
+#'
+#' @family preprocessing steps
+#' @seealso [run_DIpreprocess()] for the full pipeline, [run_scale()] for the
+#'   step that usually follows.
 #'
 #' @export
 #'
 #' @examples
-#' \donttest{
-#' set.seed(937)
-#' x <- matrix(abs(rnorm(80 * 40, mean = 100, sd = 50)), nrow = 80, ncol = 40)
-#' colnames(x) <- paste0("Feature", 1:40)
+#' data(dims_data)
+#' raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+#' x <- run_mvimpute(raw[, 1:20], verbose = FALSE)$data
 #'
-#' result <- run_transform(x, method = "log2")
-#' result
+#' res <- run_transform(x, method = "log10")
+#' res
+#' range(res$data)
+#'
+#' # glog uses QC samples, so it needs metadata
+#' \donttest{
+#' data(dims_metadata)
+#' run_transform(x, method = "glog", metadata = dims_metadata, verbose = FALSE)
 #' }
 run_transform <- function(
     x,
@@ -71,7 +108,6 @@ run_transform <- function(
     metadata  = NULL,
     group_col = "Group",
     qc_types  = c("QC", "SQC", "EQC"),
-    num_cores = 1,
     verbose   = TRUE
 ) {
 
@@ -80,159 +116,73 @@ run_transform <- function(
   .validate_data_matrix(x)
 
   method <- tolower(method)
-  valid_methods <- c("log2", "log10", "sqrt", "cbrt", "clr", "arcsin_sqrt", "vsn", "glog", "none")
-  if (!method %in% valid_methods)
-    stop("Unknown transformation method '", method, "'. Supported: ",
-         paste(valid_methods, collapse = ", "), ".", call. = FALSE)
+  if (length(method) != 1L || !method %in% .transform_methods)
+    stop("Unknown transformation method '", paste(method, collapse = ", "),
+         "'. Supported: ", paste(.transform_methods, collapse = ", "), ".", call. = FALSE)
 
   mp <- .as_matrix_preserve(x)
   x_matrix    <- mp$mat
   shift_value <- 0
+  method_used <- method
 
   msg(sprintf("Applying '%s' transformation...", method))
 
-  # VSN core validation
-  if (method == "vsn") {
-    if (!requireNamespace("parallelly", quietly = TRUE))
-      stop("Package 'parallelly' required for VSN core detection.", call. = FALSE)
-    max_available_cores <- parallelly::availableCores(omit = 2)
-    if (identical(num_cores, "max")) {
-      num_cores <- max_available_cores
-    } else if (is.numeric(num_cores)) {
-      num_cores <- as.integer(num_cores)
-      if (num_cores < 1L || num_cores > max_available_cores)
-        stop(sprintf("'num_cores' must be between 1 and %d.", max_available_cores), call. = FALSE)
-    } else {
-      stop("'num_cores' must be \"max\" or a positive integer.", call. = FALSE)
+  # Shift data so its minimum is >= 0 (strict = FALSE) or >= 1 (strict = TRUE).
+  # ponytail: one global shift for the whole matrix, not per feature.
+  .shift <- function(strict) {
+    min_val <- min(x_matrix, na.rm = TRUE)
+    if (if (strict) min_val <= 0 else min_val < 0) {
+      shift_value <<- abs(min_val) + strict
+      x_matrix    <<- x_matrix + shift_value
+      msg(sprintf("Added shift of %.4g to handle %s values.", shift_value,
+                  if (strict) "non-positive" else "negative"))
     }
+    x_matrix
+  }
+  .log10_fallback <- function(e) {
+    warning(method, " failed: ", conditionMessage(e), ". Falling back to log10.",
+            call. = FALSE)
+    method_used <<- sprintf("log10 (fallback from %s)", method)
+    log10(.shift(TRUE))
   }
 
   x_transformed <- switch(
     method,
-
-    "none" = {
-      msg("No transformation applied.")
-      x_matrix
-    },
-
-    "log2" = {
-      min_val <- min(x_matrix, na.rm = TRUE)
-      if (min_val <= 0) {
-        shift_value <- abs(min_val) + 1
-        x_matrix <- x_matrix + shift_value
-        msg(sprintf("Added shift of %.2f to handle non-positive values.", shift_value))
-      }
-      log2(x_matrix)
-    },
-
-    "log10" = {
-      min_val <- min(x_matrix, na.rm = TRUE)
-      if (min_val <= 0) {
-        shift_value <- abs(min_val) + 1
-        x_matrix <- x_matrix + shift_value
-        msg(sprintf("Added shift of %.2f to handle non-positive values.", shift_value))
-      }
-      log10(x_matrix)
-    },
-
-    "sqrt" = {
-      min_val <- min(x_matrix, na.rm = TRUE)
-      if (min_val < 0) {
-        shift_value <- abs(min_val)
-        x_matrix <- x_matrix + shift_value
-        msg(sprintf("Added shift of %.2f to handle negative values.", shift_value))
-      }
-      sqrt(x_matrix)
-    },
-
-    "cbrt" = {
-      min_val <- min(x_matrix, na.rm = TRUE)
-      if (min_val < 0) {
-        shift_value <- abs(min_val)
-        x_matrix <- x_matrix + shift_value
-        msg(sprintf("Added shift of %.2f to handle negative values.", shift_value))
-      }
-      x_matrix ^ (1 / 3)
-    },
-
-    "clr" = {
-      min_val <- min(x_matrix, na.rm = TRUE)
-      if (min_val <= 0) {
-        shift_value <- abs(min_val) + 1
-        x_matrix <- x_matrix + shift_value
-        msg(sprintf("Added shift of %.2f to handle non-positive values.", shift_value))
-      }
-      log_x <- log(x_matrix)
+    "none"  = x_matrix,
+    "log2"  = log2(.shift(TRUE)),
+    "log10" = log10(.shift(TRUE)),
+    "sqrt"  = sqrt(.shift(FALSE)),
+    "cbrt"  = .shift(FALSE)^(1 / 3),
+    "clr"   = {
+      log_x <- log(.shift(TRUE))
       log_x - rowMeans(log_x, na.rm = TRUE)
     },
-
     "arcsin_sqrt" = {
-      min_val <- min(x_matrix, na.rm = TRUE)
-      if (min_val < 0) {
-        shift_value <- abs(min_val)
-        x_matrix <- x_matrix + shift_value
-        msg(sprintf("Added shift of %.2f to handle negative values.", shift_value))
-      }
-      max_val <- max(x_matrix, na.rm = TRUE)
-      if (max_val > 1)
+      xs <- .shift(FALSE)
+      if (max(xs, na.rm = TRUE) > 1)
         stop("Arcsine sqrt requires data in [0, 1]. Max after shift is ",
-             round(max_val, 4), ".", call. = FALSE)
-      asin(sqrt(x_matrix))
+             round(max(xs, na.rm = TRUE), 4), ".", call. = FALSE)
+      asin(sqrt(xs))
     },
-
     "vsn" = {
       if (!requireNamespace("vsn", quietly = TRUE))
         stop("Package 'vsn' required. Install with: BiocManager::install('vsn')", call. = FALSE)
-      if (!requireNamespace("BiocParallel", quietly = TRUE))
-        stop("Package 'BiocParallel' required. Install with: BiocManager::install('BiocParallel')", call. = FALSE)
-
       tryCatch({
-        BPPARAM_to_use <- BiocParallel::SnowParam(workers = num_cores)
-        BiocParallel::register(BPPARAM_to_use)
-        msg(sprintf("Applying VSN transformation (%d core(s))...", num_cores))
-
         t_matrix <- t(x_matrix)
-        vsn_fit <- vsn::vsn2(t_matrix)
-        result  <- vsn::predict(vsn_fit, newdata = t_matrix)
-        BiocParallel::register(BiocParallel::SerialParam())
-        t(result)
-      }, error = function(e) {
-        tryCatch(BiocParallel::register(BiocParallel::SerialParam()), error = function(e2) NULL)
-        warning("VSN failed: ", e$message, ". Falling back to log10.", call. = FALSE)
-        min_val <- min(x_matrix, na.rm = TRUE)
-        if (min_val <= 0) {
-          shift_value <<- abs(min_val) + 1
-          x_matrix <<- x_matrix + shift_value
-        }
-        log10(x_matrix)
-      })
+        t(vsn::predict(vsn::vsn2(t_matrix, verbose = FALSE), newdata = t_matrix))
+      }, error = .log10_fallback)
     },
-
     "glog" = {
-      if (!requireNamespace("pmp", quietly = TRUE))
-        stop("Package 'pmp' required. Install with: BiocManager::install('pmp')", call. = FALSE)
       if (is.null(metadata))
         stop("'metadata' is required for glog transformation.", call. = FALSE)
       .validate_metadata(x, metadata)
       .require_col(metadata, group_col)
-
       metadata <- .add_group_collapsed(metadata, group_col, qc_types, "QC")
-
-      tryCatch({
-        msg("Applying glog transformation...")
-        glog_result <- pmp::glog_transformation(
-          t(x_matrix), classes = metadata$Group_, qc_label = "QC"
-        )
-        t(glog_result)
-      }, error = function(e) {
-        warning("glog failed: ", e$message, ". Falling back to log10.", call. = FALSE)
-        min_val <- min(x_matrix, na.rm = TRUE)
-        if (min_val <= 0) {
-          shift_value <<- abs(min_val) + 1
-          x_matrix <<- x_matrix + shift_value
-        }
-        log10(x_matrix)
-      })
+      tryCatch(
+        t(pmp::glog_transformation(t(x_matrix), classes = metadata$Group_,
+                                   qc_label = "QC")),
+        error = .log10_fallback
+      )
     }
   )
 
@@ -241,11 +191,10 @@ run_transform <- function(
   structure(
     list(
       data          = .restore_class(x_transformed, mp$was_matrix),
-      method_used   = method,
+      method_used   = method_used,
       shift_applied = shift_value,
       parameters    = list(
         method    = method,
-        num_cores = if (method == "vsn") num_cores else NA,
         group_col = group_col,
         qc_types  = qc_types
       )
@@ -254,7 +203,6 @@ run_transform <- function(
   )
 }
 
-#' @param x Object to print.
 #' @param ... Ignored.
 #' @rdname run_transform
 #' @export

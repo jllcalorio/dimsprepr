@@ -73,14 +73,54 @@ test_that("QCRSC CV crash gives an actionable error message", {
   skip_if_not_installed("pmp")
   # 2 QC samples -> smooth.spline CV needs >= 4 unique x values -> crashes internally
   td <- make_qcrsc_data(n_bio = 10, n_qc = 2)
-  expect_error(
-    run_driftBatchCorrect(
-      td$x, td$metadata,
-      injection_col = "InjectionSequence",
-      min_QC = 2,
-      spline_smooth_param = 0,   # CV mode
-      verbose = FALSE
+  expect_warning(
+    expect_error(
+      run_driftBatchCorrect(
+        td$x, td$metadata,
+        injection_col = "InjectionSequence",
+        min_QC = 2,
+        spline_smooth_param = 0,   # CV mode
+        verbose = FALSE
+      ),
+      regexp = "fewer than 4 QC samples.*spline_smooth_param"
     ),
-    regexp = "spline_smooth_param"
+    "Falling back to fixed spar"
   )
+})
+
+test_that("QCRSC reduces QC drift on the bundled example data", {
+  x <- dims_clean(1:10)
+  res <- run_driftBatchCorrect(x, dims_metadata, spline_smooth_param = 0.5,
+                               verbose = FALSE)
+  qc <- dims_metadata$Group == "QC"
+  rsd <- function(m) matrixStats::colSds(m[qc, ]) / colMeans(m[qc, ])
+  expect_equal(res$method_used, "QCRSC")
+  expect_equal(dim(res$data), dim(x))
+  expect_lt(median(rsd(res$data)), median(rsd(x)))
+})
+
+test_that("character batch labels are accepted", {
+  x <- dims_clean(1:5)
+  meta <- dims_metadata
+  meta$Batch <- paste0("B", meta$Batch)
+  res <- run_driftBatchCorrect(x, meta, spline_smooth_param = 0.5, verbose = FALSE)
+  expect_true(res$correction_applied)
+  expect_false(anyNA(res$data))
+})
+
+test_that("ComBat mode corrects batches and handles a single batch", {
+  skip_if_not_installed("sva")
+  x <- dims_clean(1:10)
+  res <- suppressMessages(
+    run_driftBatchCorrect(x, dims_metadata, batch_corr_only = TRUE, verbose = FALSE)
+  )
+  expect_equal(res$method_used, "ComBat")
+
+  one <- dims_metadata
+  one$Batch <- 1L
+  expect_warning(
+    res1 <- run_driftBatchCorrect(x, one, batch_corr_only = TRUE, verbose = FALSE),
+    "Only one batch"
+  )
+  expect_equal(res1$data, x)
 })

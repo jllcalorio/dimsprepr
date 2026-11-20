@@ -16,7 +16,8 @@ run_scale(
 \method{print}{run_scale}(x, ...)
 }
 \arguments{
-\item{x}{Object to print.}
+\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
+For \code{print()}, a \code{run_scale} object.}
 
 \item{method}{Character. Scaling method:
 \itemize{
@@ -54,33 +55,69 @@ for multivariate analysis. Includes classical scaling methods as well as
 variance-stability (VAST) scaling variants.
 }
 \details{
-\strong{auto}: Recommended for PCA, clustering, t-tests, ANOVA.
+With \eqn{\bar{x}_j} and \eqn{s_j} the mean and standard deviation of
+feature \eqn{j} (van den Berg et al., 2006):
+\itemize{
+\item \strong{mean}: \eqn{x - \bar{x}_j}.
+\item \strong{auto} (unit variance): \eqn{(x - \bar{x}_j) / s_j}. Every feature gets
+equal weight; recommended for PCA, clustering, t-tests, and ANOVA.
+\item \strong{pareto}: \eqn{(x - \bar{x}_j) / \sqrt{s_j}}. Shrinks large fold changes
+less than auto-scaling; recommended for PLS-DA and OPLS-DA.
+\item \strong{vast} (variable stability; Keun et al., 2003): auto-scaled data
+multiplied by \eqn{\bar{x}_j / s_j}, i.e. divided by the coefficient of
+variation, which down-weights unstable features.
+\item \strong{svast} / \strong{xvast}: supervised VAST variants (Yang et al., 2015) that
+use the mean (svast) or maximum (xvast) of the within-group
+\eqn{\bar{x} / s} ratios, so they require \code{metadata} and \code{group_col}.
+\item \strong{ln}: natural log of the data (a transformation, kept for backward
+compatibility; prefer \code{\link[=run_transform]{run_transform()}}).
+}
 
-\strong{pareto}: Recommended for PLS-DA, OPLS-DA.
-
-\strong{vast/svast/xvast}: Variance-stability methods from Keun et al. (2003)
-and Yang et al. (2015).
+Zero-variance features get a scaling factor of 1 to avoid division by zero.
 }
 \examples{
-\donttest{
-set.seed(662)
-x <- matrix(rnorm(100 * 50, mean = 100, sd = 50), nrow = 100, ncol = 50)
-colnames(x) <- paste0("Feature", 1:50)
+data(dims_data)
+data(dims_metadata)
+raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+x <- log10(run_mvimpute(raw[, 1:20], verbose = FALSE)$data)
 
-result <- run_scale(x, method = "auto")
-result
-}
+res <- run_scale(x, method = "pareto")
+res
+round(head(res$scaling_factors), 3)
+
+# Supervised VAST needs group labels
+run_scale(x, method = "svast", metadata = dims_metadata, verbose = FALSE)
 }
 \references{
-van den Berg, R.A., et al. (2006). BMC Genomics, 7, 142.
-https://doi.org/10.1186/1471-2164-7-142
+Keun, H.C., Ebbels, T.M.D., Antti, H., Bollard, M.E., Beckonert, O.,
+Holmes, E., Lindon, J.C., & Nicholson, J.K. (2003). Improved analysis of
+multivariate data by variable stability scaling: application to NMR-based
+metabolic profiling. \emph{Analytica Chimica Acta}, 490(1-2), 265-276.
+\doi{10.1016/S0003-2670(03)00094-1}
 
-Yang, J., et al. (2015). Frontiers in Molecular Biosciences, 2, 4.
-https://doi.org/10.3389/fmolb.2015.00004
+van den Berg, R.A., Hoefsloot, H.C.J., Westerhuis, J.A., Smilde, A.K., &
+van der Werf, M.J. (2006). Centering, scaling, and transformations:
+improving the biological information content of metabolomics data.
+\emph{BMC Genomics}, 7, 142. \doi{10.1186/1471-2164-7-142}
+
+Yang, J., Zhao, X., Lu, X., Lin, X., & Xu, G. (2015). A data preprocessing
+strategy for metabolomics to reduce the mask effect in data analysis.
+\emph{Frontiers in Molecular Biosciences}, 2, 4. \doi{10.3389/fmolb.2015.00004}
 }
 \seealso{
-\code{\link{run_DIpreprocess}}
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} for the full pipeline.
+
+Other preprocessing steps:
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
+\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
+\code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filtermissing]{run_filtermissing()}},
+\code{\link[=run_filtervariance]{run_filtervariance()}},
+\code{\link[=run_mvimpute]{run_mvimpute()}},
+\code{\link[=run_normalize]{run_normalize()}},
+\code{\link[=run_transform]{run_transform()}}
 }
 \author{
 John Lennon L. Calorio
 }
+\concept{preprocessing steps}

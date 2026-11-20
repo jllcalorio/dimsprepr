@@ -23,24 +23,30 @@ run_normalize(
 \method{print}{run_normalize}(x, ...)
 }
 \arguments{
-\item{x}{Object to print.}
+\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
+For \code{print()}, a \code{run_normalize} object.}
 
 \item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).}
 
 \item{method}{Character or numeric vector. Normalization method:
 \itemize{
-\item \code{"sum"}: Total sum normalization
-\item \code{"median"}: Median normalization
-\item \code{"specific_factor"}: Use values from a metadata column
-\item \code{"pqn_global"}: PQN using global median
-\item \code{"pqn_reference"}: PQN using a specific reference sample
-\item \code{"pqn_group"}: PQN using pooled QC samples as reference
-\item \code{"pqn"}: PQN via the pmp package (requires \pkg{pmp})
-\item \code{"quantile"}: Alias for \code{"pqn"} (PQN via pmp)
+\item \code{"sum"}: Total sum normalization (divide each sample by its row sum)
+\item \code{"median"}: Median normalization (divide each sample by its row median)
+\item \code{"specific_factor"}: Divide by values from the \code{factor_col}
+metadata column (e.g. osmolality or creatinine)
+\item \code{"pqn_global"}: Probabilistic quotient normalization (PQN) with the
+median spectrum of all samples as reference
+\item \code{"pqn_reference"}: PQN with one sample (\code{ref_sample}) as reference
+\item \code{"pqn_group"}: PQN with the median spectrum of the
+\code{group_sample} samples (pooled QCs by default) as reference
+\item \code{"pqn"}: PQN via \code{\link[pmp:pqn_normalisation]{pmp::pqn_normalisation()}} with the QC
+samples as reference
+\item \code{"quantile"}: Alias for \code{"pqn"}, kept for backward
+compatibility. Note this is \emph{not} quantile normalization.
 \item \code{"col_rel_abundance"}: Relative abundance per column (feature)
 \item \code{"row_rel_abundance"}: Relative abundance per row (sample)
 \item \code{"none"}: No normalization
-\item Numeric vector: Custom normalization factors
+\item Numeric vector: custom factors, one per non-QC sample
 }
 When \code{method} is a column name in \code{metadata}, that column is used
 as normalization factors (equivalent to \code{"specific_factor"}).}
@@ -48,13 +54,18 @@ as normalization factors (equivalent to \code{"specific_factor"}).}
 \item{factor_col}{Character. Metadata column with normalization factors.
 Default: "Normalization". Ignored if \code{method} is a metadata column name.}
 
-\item{ref_sample}{Character. Reference sample for PQN. Default: NULL.}
+\item{ref_sample}{Character. Sample identifier (in \code{sample_id_col}) used
+as reference for \code{"pqn_reference"}. Default: NULL.}
 
-\item{group_sample}{Character. Group label for PQN group reference.
-Default: "QC".}
+\item{group_sample}{Character. Group label(s) whose median spectrum is the
+reference for \code{"pqn_group"}. Matches either the collapsed QC label
+\code{"QC"} (any of \code{qc_types}) or a raw label in \code{group_col}
+such as \code{"SQC"}. Default: "QC".}
 
-\item{qc_normalize}{Character. QC normalization strategy: "mean", "median", "none".
-Default: "none".}
+\item{qc_normalize}{Character. How QC samples are scaled when sample factors
+are supplied (numeric \code{method} or \code{"specific_factor"}), since QCs
+usually have no factor of their own: \code{"mean"} or \code{"median"} of the
+sample factors, or \code{"none"} (divide by 1). Default: "none".}
 
 \item{group_col}{Character. Column with group labels. Default: "Group".}
 
@@ -72,7 +83,8 @@ Default: "mean".}
 \value{
 A list of class \code{"run_normalize"} containing:
 \item{data}{Normalized data (same class as input \code{x})}
-\item{normalization_factors}{Numeric vector of factors used}
+\item{normalization_factors}{Numeric vector with the factor each sample
+was divided by}
 \item{method_used}{Character describing method}
 \item{parameters}{List of parameters}
 }
@@ -81,30 +93,61 @@ Applies various normalization methods to account for dilution effects and
 sample-to-sample variation in metabolomics data.
 }
 \details{
-See the package documentation for full descriptions of each method.
-\code{"pqn"} and \code{"quantile"} both call \code{pmp::pqn_normalisation()}.
+Normalization removes unwanted sample-to-sample variation such as
+dilution, which is especially large in urine. Every method divides each
+sample (row) by one factor.
+
+PQN (Dieterle et al., 2006) computes, for each sample, the median of the
+feature-wise quotients between that sample and a reference spectrum. It is
+more robust than sum normalization when a few features change strongly.
+The \code{"pqn"} / \code{"quantile"} options delegate to
+\code{\link[pmp:pqn_normalisation]{pmp::pqn_normalisation()}} (Jankevics et al., 2025), falling back to
+\code{"sum"} with a warning if it fails.
+
+Missing values are ignored when computing factors. Any \code{Inf} created
+by a zero factor is replaced with \code{NA}.
 }
 \examples{
-\donttest{
-set.seed(215)
-x <- matrix(abs(rnorm(80 * 40, mean = 100, sd = 20)), nrow = 80, ncol = 40)
-colnames(x) <- paste0("Feature", 1:40)
-meta <- data.frame(
-  Sample = paste0("S", 1:80),
-  Group = rep(c("Control", "Treatment", "QC"), c(30, 30, 20))
-)
+data(dims_data)
+data(dims_metadata)
+raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+x <- run_mvimpute(raw[, 1:20], verbose = FALSE)$data
 
-result <- run_normalize(x, meta, method = "median")
-result
-}
+res <- run_normalize(x, dims_metadata, method = "pqn_group")
+res
+head(res$normalization_factors)
+
+# Sample-specific factors (e.g. osmolality) from a metadata column
+meta <- dims_metadata
+meta$Osmolality <- ifelse(meta$Group == "QC", NA, runif(nrow(meta), 0.8, 1.2))
+run_normalize(x, meta, method = "Osmolality", qc_normalize = "median",
+              verbose = FALSE)
 }
 \references{
-Dieterle, F., et al. (2006). Analytical Chemistry, 78(13), 4281-4290.
-https://doi.org/10.1021/ac051632c
+Dieterle, F., Ross, A., Schlotterbeck, G., & Senn, H. (2006). Probabilistic
+quotient normalization as robust method to account for dilution of complex
+biological mixtures. Application in 1H NMR metabonomics.
+\emph{Analytical Chemistry}, 78(13), 4281-4290. \doi{10.1021/ac051632c}
+
+Jankevics, A., Lloyd, G.R., & Weber, R.J.M. (2025). \emph{pmp: Peak Matrix
+Processing and signal batch correction for metabolomics datasets}.
+R package. \doi{10.18129/B9.bioc.pmp}
 }
 \seealso{
-\code{\link{run_DIpreprocess}}
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} for the full pipeline, \code{\link[=run_transform]{run_transform()}} for
+the step that usually follows.
+
+Other preprocessing steps:
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
+\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
+\code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filtermissing]{run_filtermissing()}},
+\code{\link[=run_filtervariance]{run_filtervariance()}},
+\code{\link[=run_mvimpute]{run_mvimpute()}},
+\code{\link[=run_scale]{run_scale()}},
+\code{\link[=run_transform]{run_transform()}}
 }
 \author{
 John Lennon L. Calorio
 }
+\concept{preprocessing steps}

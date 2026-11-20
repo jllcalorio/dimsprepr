@@ -11,125 +11,131 @@ vignette: >
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  fig.width = 7,
-  fig.height = 5
+  fig.width = 8,
+  fig.height = 6
 )
 ```
 
 ## Introduction
 
 **dimsprepr** provides a complete, reproducible preprocessing pipeline for
-direct-injection mass spectrometry (DIMS) metabolomics data.  It covers:
-missing-value filtering, imputation, signal-drift and batch correction,
-normalization, transformation, scaling, and quality filtering — all
-orchestrated through a single function call.
+direct-injection mass spectrometry (DIMS) metabolomics data. It covers
+missing-value filtering, imputation, QC-based signal-drift and batch
+correction, normalization, transformation, quality filtering, and scaling,
+all orchestrated through a single function call.
 
-## Quick Example
+## The example data
 
 ```{r setup}
 library(dimsprepr)
 
-# Load the bundled example dataset
-data(dims_data, package = "dimsprepr")
-data(dims_metadata, package = "dimsprepr")
+data(dims_data)
+data(dims_metadata)
 
 dim(dims_data)
-table(dims_metadata$Group)
+table(dims_metadata$Group, dims_metadata$Batch)
+head(dims_metadata)
 ```
 
-### Run the full pipeline
+`dims_data` is a simulated 60-injection, 80-feature matrix in two batches.
+Pooled QC samples open and close each batch and recur every 6th injection,
+the layout QC-based drift correction needs. Zeros mark values below the
+detection limit.
 
-The `run_DIpreprocess()` function executes all preprocessing steps in a
-fixed, validated order.  Here we skip drift correction (since this is a
-small simulated dataset without a realistic QC injection pattern):
+## Run the full pipeline
+
+`run_DIpreprocess()` executes all steps in a fixed, validated order:
+
+1. input validation, 2. outlier removal, 3. missing-value filtering,
+4. imputation, 5. drift/batch correction (QCRSC), 6. normalization,
+7. transformation, 8. quality filtering (QC-RSD and variance, on unscaled
+data), 9. scaling into a NONPLS and a PLS branch, 10. replicate merging.
+
 ```{r pipeline}
 result <- run_DIpreprocess(
   x                = dims_data,
   metadata         = dims_metadata,
-  normalize_method = "median",
+  normalize_method = "pqn_group",
   transform_method = "log10",
-  correct_drift    = FALSE,
-  rsd_threshold    = 0.5,
-  variance_percentile = 5,
+  spline_smooth    = 0.5,
   verbose          = FALSE
 )
 
 result
+summary(result)
 ```
 
-The result is a named list with intermediate and final data matrices:
+The result keeps the data after each step, the final matrices for the two
+scaling branches, and a log of the dimensions:
 
 ```{r inspect}
-# Final preprocessed matrix (auto-scaled for general analysis)
-dim(result$data_nonpls)
-
-# Step-by-step dimension tracking
-result$dimensions
+dim(result$data_nonpls)   # auto-scaled: PCA, clustering, univariate tests
+dim(result$data_pls)      # Pareto-scaled: PLS-DA / OPLS-DA
+head(result$features_final)
 ```
 
-## Using Individual Functions
+## Diagnostic plots
 
-Each preprocessing step is also available as a standalone function for
-maximum flexibility.
+`plot_beforeafter()` shows features along the injection order, with a
+LOESS trend through the QC samples. Given a pipeline result, it compares
+the imputed data with the drift-corrected data:
 
-### 1. Missing-Value Filtering
+```{r plot-drift}
+plot_beforeafter(result, plot_what = c("mz_0002", "mz_0015"))
+```
 
-```{r filtermissing}
-filt <- run_filtermissing(
-  dims_data,
-  dims_metadata,
-  threshold = 0.3,
-  verbose   = FALSE
-)
+`plot_dist_beforeafter()` compares distributions, here imputed versus the
+final auto-scaled data:
+
+```{r plot-dist}
+invisible(plot_dist_beforeafter(result, n_random = 20))
+```
+
+## Using individual functions
+
+Each step is also available as a standalone function.
+
+```{r steps}
+filt  <- run_filtermissing(dims_data, dims_metadata, threshold = 0.2,
+                           verbose = FALSE)
+imp   <- run_mvimpute(filt$data, method = 0.2, verbose = FALSE)
+corr  <- run_driftBatchCorrect(imp$data, dims_metadata,
+                               spline_smooth_param = 0.5, verbose = FALSE)
+norm  <- run_normalize(corr$data, dims_metadata, method = "pqn_group",
+                       verbose = FALSE)
+rsd   <- run_filterRSD(norm$data, dims_metadata, max_rsd = 0.3, verbose = FALSE)
+trans <- run_transform(rsd$data, method = "log10", verbose = FALSE)
+varf  <- run_filtervariance(trans$data, percentile = 10, verbose = FALSE)
+sc    <- run_scale(varf$data, method = "auto", verbose = FALSE)
+
 filt
+rsd
+sc
 ```
 
-### 2. Imputation
+Note that `run_filtermissing()` converts zeros to `NA` before filtering, and
+`run_mvimpute()` imputes only `NA` values.
 
-```{r impute}
-imp <- run_mvimpute(filt$data, method = 0.2, verbose = FALSE)
-imp
-```
+## Comparing preprocessing strategies
 
-### 3. Normalization
+Supply vectors to `normalize_method`, `transform_method`, `scale_nonpls`, or
+`scale_pls` to compute all combinations. Steps 1 to 5 run only once, and
+normalization, transformation, and filtering run once per
+normalize x transform pair:
 
-```{r normalize}
-norm <- run_normalize(imp$data, dims_metadata, method = "median", verbose = FALSE)
-```
-
-### 4. Transformation
-
-```{r transform}
-trans <- run_transform(norm$data, method = "log10", verbose = FALSE)
-```
-
-### 5. Scaling
-
-```{r scale}
-scaled <- run_scale(trans$data, method = "auto", verbose = FALSE)
-scaled
-```
-
-## Cartesian-Product Pipelines
-
-Supply vectors to `normalize_method` and/or `transform_method` to
-compute all combinations automatically.  Expensive upstream steps
-(filtering, imputation, drift correction) run only once:
-
-```{r multi, eval=FALSE}
+```{r multi}
 multi <- run_DIpreprocess(
   x                = dims_data,
   metadata         = dims_metadata,
-  normalize_method = c("sum", "median"),
-  transform_method = c("log10", "log2"),
-  correct_drift    = FALSE,
+  normalize_method = c("median", "pqn_group"),
+  transform_method = c("log10", "glog"),
+  spline_smooth    = 0.5,
   verbose          = FALSE
 )
-names(multi)
-# [1] "sum_log10"    "sum_log2"     "median_log10" "median_log2"
+multi
 ```
 
-## Session Info
+## Session info
 
 ```{r session}
 sessionInfo()

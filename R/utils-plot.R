@@ -1,4 +1,4 @@
-# Internal plot helpers – shared between plot_beforeafter and plot_dist_beforeafter
+# Internal plot helpers - shared between plot_beforeafter and plot_dist_beforeafter
 # ponytail: deduplicates ~100 lines of theme/validation logic
 
 #' Check a single positive numeric (or NULL)
@@ -20,12 +20,11 @@
 #' Build base ggplot2 theme from a theme name
 #' @noRd
 .build_base_theme <- function(theme_choice, base_size, font_family, strip_text_size = NULL) {
-  valid_themes <- c("nature", "minimal", "classic", "bw", "light", "dark")
   theme_choice <- tolower(theme_choice)
-  if (!theme_choice %in% valid_themes)
+  if (length(theme_choice) != 1L || !theme_choice %in% .plot_themes)
     stop(sprintf(
       "'theme' must be one of: %s. Got: '%s'.",
-      paste(valid_themes, collapse = ", "), theme_choice
+      paste(.plot_themes, collapse = ", "), theme_choice
     ), call. = FALSE)
 
   base <- switch(
@@ -81,7 +80,7 @@
 
 #' Validate and resolve plot_what feature names
 #' @noRd
-.resolve_plot_what <- function(plot_what, available_cols, seed = NULL, max_default = 6L) {
+.resolve_plot_what <- function(plot_what, available_cols, max_default = 6L) {
   if (!is.null(plot_what)) {
     if (!is.character(plot_what) || length(plot_what) < 1L)
       stop("'plot_what' must be a non-empty character vector of feature names.", call. = FALSE)

@@ -1,7 +1,5 @@
 #' Plot Distribution Comparison Before and After Data Transformation
 #'
-#' @title Plot Distribution Comparison Before and After Data Transformation
-#'
 #' @description
 #' Generates density and box plots comparing data distributions before and
 #' after any transformation, normalization, scaling, or correction step.
@@ -10,10 +8,14 @@
 #'
 #' @param x A \code{data.frame}, \code{tibble}, or \code{matrix} representing
 #'   the data \emph{before} transformation. Rows are samples; columns are
-#'   features. Column names may contain special characters.
+#'   features. Column names may contain special characters. Alternatively, a
+#'   [run_DIpreprocess()] result: \code{x} then becomes its imputed data
+#'   (\code{$data_imputed}) and \code{y} its final NONPLS data
+#'   (\code{$data_nonpls}), so \code{y} can be omitted.
 #' @param y A \code{data.frame}, \code{tibble}, or \code{matrix} representing
 #'   the data \emph{after} transformation. Must have the same dimensions and
-#'   column names as \code{x}.
+#'   column names as \code{x}. Ignored when \code{x} is a
+#'   \code{run_DIpreprocess} result.
 #' @param group_by Character. Perspective for box plots. \code{"sample"}
 #'   shows one box per sample; \code{"feature"} shows one box per feature.
 #'   Default is \code{"sample"}.
@@ -71,7 +73,7 @@
 #'
 #' Box plot items are ordered by median value for readability.
 #'
-#' Font sizes follow the same resolution priority as \code{plot_beforeafter}:
+#' Font sizes follow the same resolution priority as [plot_beforeafter()]:
 #' explicit argument > \code{global_font_size} scaling > \code{base_size}
 #' derived default.
 #'
@@ -90,52 +92,28 @@
 #' }
 #'
 #' @examples
-#' \dontrun{
-#' set.seed(42)
-#' n_samples  <- 40
-#' n_features <- 20
+#' data(dims_data)
+#' data(dims_metadata)
+#' raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+#' before <- run_mvimpute(raw, verbose = FALSE)$data
+#' after  <- run_normalize(before, dims_metadata, method = "pqn_group",
+#'                         verbose = FALSE)$data
 #'
-#' x <- as.data.frame(
-#'   matrix(abs(rnorm(n_samples * n_features, mean = 1000, sd = 300)),
-#'          nrow = n_samples,
-#'          dimnames = list(
-#'            paste0("S", seq_len(n_samples)),
-#'            paste0("Feature_", seq_len(n_features))
-#'          ))
-#' )
-#' y <- as.data.frame(scale(x))
+#' # Sample-wise comparison on the log scale
+#' res <- plot_dist_beforeafter(log10(before), log10(after),
+#'                              x_label = "Raw", y_label = "PQN", n_random = 15)
 #'
-#' # Sample-wise comparison, default settings
-#' result <- plot_dist_beforeafter(
-#'   x       = x,
-#'   y       = y,
-#'   group_by = "sample"
-#' )
-#'
-#' # Feature-wise, subset of features, classic theme
-#' result <- plot_dist_beforeafter(
-#'   x         = x,
-#'   y         = y,
-#'   group_by  = "feature",
-#'   plot_what = paste0("Feature_", 1:10),
-#'   theme     = "classic"
-#' )
-#'
-#' # Extract individual panels
-#' result$plot_density_before
-#' result$plot_box_after
-#' }
+#' # Feature-wise, subset of features; panels are returned for re-use
+#' res <- plot_dist_beforeafter(log10(before), log10(after), group_by = "feature",
+#'                              plot_what = colnames(before)[1:10],
+#'                              theme = "classic")
+#' res$plot_box_after
 #'
 #' @author John Lennon L. Calorio
 #'
-#' @importFrom ggplot2 ggplot aes geom_density geom_boxplot coord_flip labs
-#' @importFrom ggplot2 theme_bw theme_minimal theme_classic theme_light theme_dark theme
-#' @importFrom ggplot2 element_text element_blank element_line element_rect
-#' @importFrom gridExtra arrangeGrob
-#' @importFrom grid grid.newpage grid.draw textGrob gpar
-#' @importFrom stats median
-#' 
-#' @seealso \code{\link{run_DIpreprocess}}
+#' @family plotting functions
+#' @seealso [run_normalize()], [run_transform()], and [run_scale()], whose
+#'   effects this plot is designed to show.
 #'
 #' @export
 plot_dist_beforeafter <- function(
@@ -162,21 +140,13 @@ plot_dist_beforeafter <- function(
     ylab_size        = NULL
 ) {
 
-  # --- Integration with run_DIpreprocess ---
+  # --- Integration with run_DIpreprocess: imputed vs final (NONPLS) data ---
   if (inherits(x, "run_DIpreprocess")) {
-    # Extract states
-    data_before <- x$data_imputed
-    data_after  <- x$data_nonpls
-    
-    # Subset to common features to ensure exact alignment
-    common_features <- intersect(colnames(data_before), colnames(data_after))
-    if (length(common_features) == 0) {
-      stop("No common features found between imputed and final non-PLS data.")
-    }
-    
-    # Overwrite x and y
-    x <- data_before[, common_features, drop = FALSE]
-    y <- data_after[, common_features, drop = FALSE]
+    if (!is.null(x$error))
+      stop("The run_DIpreprocess result contains an error: ", x$error, call. = FALSE)
+    common <- intersect(colnames(x$data_imputed), colnames(x$data_nonpls))
+    y <- x$data_nonpls[, common, drop = FALSE]
+    x <- x$data_imputed[, common, drop = FALSE]
   }
 
   # -------------------------------------------------------------------------
@@ -262,15 +232,6 @@ plot_dist_beforeafter <- function(
     plot_cols <- as.integer(plot_cols)
   }
 
-  valid_themes <- c("nature", "minimal", "classic", "bw", "light", "dark")
-  theme_choice <- tolower(theme)
-  if (!theme_choice %in% valid_themes) {
-    stop(
-      "'theme' must be one of: ", paste(valid_themes, collapse = ", "), ". ",
-      "Got: '", theme, "'."
-    )
-  }
-
   if (!is.character(font_family) || length(font_family) != 1L) {
     stop("'font_family' must be a single character string.")
   }
@@ -305,33 +266,9 @@ plot_dist_beforeafter <- function(
   r_ylab_size     <- .resolve_size(ylab_size,     gfs_factor, base_size)
   r_axis_text     <- .resolve_size(NULL,          gfs_factor, base_size - 1)
 
-  # -------------------------------------------------------------------------
-  # Theme construction
-  # -------------------------------------------------------------------------
-  base_theme <- switch(
-    theme_choice,
-    "nature"  = ggplot2::theme_bw(base_size = base_size, base_family = font_family) +
-      ggplot2::theme(
-        panel.grid.major = ggplot2::element_line(color = "grey92", linewidth = 0.4),
-        panel.grid.minor = ggplot2::element_blank(),
-        panel.border     = ggplot2::element_rect(color = "grey70", fill = NA, linewidth = 0.6)
-      ),
-    "minimal" = ggplot2::theme_minimal(base_size = base_size, base_family = font_family),
-    "classic" = ggplot2::theme_classic(base_size = base_size, base_family = font_family),
-    "bw"      = ggplot2::theme_bw(base_size     = base_size, base_family = font_family),
-    "light"   = ggplot2::theme_light(base_size  = base_size, base_family = font_family),
-    "dark"    = ggplot2::theme_dark(base_size   = base_size, base_family = font_family)
-  )
-
-  custom_theme <- ggplot2::theme(
-    panel.grid.major = ggplot2::element_blank(),
-    panel.grid.minor = ggplot2::element_blank(),
-    plot.title       = ggplot2::element_text(size = r_title_size,  hjust = 0.5,
-                                             face = "bold", family = font_family),
-    axis.title.x     = ggplot2::element_text(size = r_xlab_size,   family = font_family),
-    axis.title.y     = ggplot2::element_text(size = r_ylab_size,   family = font_family),
-    axis.text        = ggplot2::element_text(size = r_axis_text,   family = font_family)
-  )
+  base_theme   <- .build_base_theme(theme, base_size, font_family)
+  custom_theme <- .build_custom_theme(font_family, r_title_size, r_xlab_size,
+                                      r_ylab_size, r_axis_text, title_face = "bold")
 
   # -------------------------------------------------------------------------
   # Convert to long format (base R, no tidyr dependency)
@@ -355,7 +292,7 @@ plot_dist_beforeafter <- function(
   # -------------------------------------------------------------------------
   # Build density plots (all features, all samples)
   # -------------------------------------------------------------------------
-  p_density_before <- ggplot2::ggplot(long_x, ggplot2::aes(x = value)) +
+  p_density_before <- ggplot2::ggplot(long_x, ggplot2::aes(x = .data$value)) +
     ggplot2::geom_density(fill = x_fill, color = x_fill, alpha = point_alpha) +
     ggplot2::labs(
       title = paste("Distribution -", x_label),
@@ -364,7 +301,7 @@ plot_dist_beforeafter <- function(
     ) +
     base_theme + custom_theme
 
-  p_density_after <- ggplot2::ggplot(long_y, ggplot2::aes(x = value)) +
+  p_density_after <- ggplot2::ggplot(long_y, ggplot2::aes(x = .data$value)) +
     ggplot2::geom_density(fill = y_fill, color = y_fill, alpha = point_alpha) +
     ggplot2::labs(
       title = paste("Distribution -", y_label),
@@ -400,7 +337,7 @@ plot_dist_beforeafter <- function(
   sub_y <- long_y[long_y[[item_col]] %in% selected_items, , drop = FALSE]
 
   # Order items by median of 'before' data for consistency across panels
-  med_order <- names(sort(tapply(sub_x$value, sub_x[[item_col]], median, na.rm = TRUE)))
+  med_order <- names(sort(tapply(sub_x$value, sub_x[[item_col]], stats::median, na.rm = TRUE)))
   sub_x[[item_col]] <- factor(sub_x[[item_col]], levels = med_order)
   sub_y[[item_col]] <- factor(sub_y[[item_col]], levels = med_order)
 
@@ -411,7 +348,7 @@ plot_dist_beforeafter <- function(
 
   p_box_before <- ggplot2::ggplot(
     sub_x,
-    ggplot2::aes(x = .data[[item_col]], y = value)
+    ggplot2::aes(x = .data[[item_col]], y = .data$value)
   ) +
     ggplot2::geom_boxplot(fill = x_fill, color = "grey30",
                           alpha = point_alpha, outlier.size = 0.8) +
@@ -423,7 +360,7 @@ plot_dist_beforeafter <- function(
 
   p_box_after <- ggplot2::ggplot(
     sub_y,
-    ggplot2::aes(x = .data[[item_col]], y = value)
+    ggplot2::aes(x = .data[[item_col]], y = .data$value)
   ) +
     ggplot2::geom_boxplot(fill = y_fill, color = "grey30",
                           alpha = point_alpha, outlier.size = 0.8) +

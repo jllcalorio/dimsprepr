@@ -25,3 +25,11 @@ test_that("run_filtervariance rejects bad inputs", {
   td <- make_test_data()
   expect_error(run_filtervariance(td$x, percentile = 200), "between 0 and 100")
 })
+
+test_that("lowest-variance features are removed first", {
+  x <- sapply(1:10, function(s) c(0, s))    # variance increases with column
+  colnames(x) <- paste0("F", 1:10)
+  res <- run_filtervariance(x, percentile = 20, verbose = FALSE)
+  expect_true(all(c("F1", "F2") %in% res$features_removed))
+  expect_true("F10" %in% res$features_kept)
+})

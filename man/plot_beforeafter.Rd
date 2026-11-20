@@ -35,16 +35,21 @@ plot_beforeafter(
 \arguments{
 \item{x}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing
 the data \emph{before} the transformation. Rows are samples; columns are
-features. Column names may contain special characters. Input can be
-a \code{link{run_DIpreprocess}} class.}
+features. Column names may contain special characters. Alternatively, a
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} result: \code{x} then becomes its imputed data
+(\code{$data_imputed}), \code{y} its drift/batch-corrected data
+(\code{$data_corrected}), and \code{metadata} its standardized metadata,
+so \code{y} and \code{metadata} can be omitted.}
 
 \item{y}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing
 the data \emph{after} the transformation. Must have the same dimensions
-and column names as \code{x}.}
+and column names as \code{x}. Ignored when \code{x} is a
+\code{run_DIpreprocess} result.}
 
 \item{metadata}{A \code{data.frame} containing sample-level metadata shared
 by both \code{x} and \code{y}. Must have the same number of rows as
-\code{x} and \code{y}.}
+\code{x} and \code{y}. Optional when \code{x} is a
+\code{run_DIpreprocess} result.}
 
 \item{plot_what}{Character vector or \code{NULL}. Column names from \code{x} to be plotted.
 If \code{NULL} (default), the function randomly selects up to 6 features.
@@ -142,8 +147,6 @@ sample group and shaped by batch, with an optional LOESS trend line fitted
 to a user-defined reference group (e.g., QC samples).
 }
 \details{
-Plot Pairwise Before-and-After Comparison for Selected Features
-
 \code{x} and \code{y} must share identical row counts, column counts, and
 column names. Row order is assumed to correspond between \code{x},
 \code{y}, and \code{metadata}.
@@ -168,38 +171,37 @@ invisible \code{gtable} grob that can be redrawn or exported with
 \code{ggplot2::ggsave()}.
 }
 \examples{
-\dontrun{
-set.seed(42)
-n_samples  <- 30
-n_features <- 4
+data(dims_data)
+data(dims_metadata)
+raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+before <- run_mvimpute(raw[, 1:6], verbose = FALSE)$data
+after  <- run_normalize(before, dims_metadata, method = "pqn_group",
+                        verbose = FALSE)$data
 
-x <- as.data.frame(
-  matrix(abs(rnorm(n_samples * n_features, mean = 1000, sd = 200)),
-         nrow = n_samples,
-         dimnames = list(NULL, paste0("Feature_", seq_len(n_features))))
-)
-y <- as.data.frame(x + rnorm(n_samples * n_features, sd = 50))
+plot_beforeafter(before, after, dims_metadata, plot_what = "mz_0001",
+                 x_label = "Raw", y_label = "PQN-normalized")
 
-meta <- data.frame(
-  InjectionSequence = seq_len(n_samples),
-  Batch             = rep(c("B1", "B2"), each = n_samples / 2),
-  Group             = rep(c("Sample", "QC"), times = c(n_samples - 6, 6))
-)
+# A run_DIpreprocess() result can be passed directly as `x`; it then shows
+# imputed vs drift-corrected data (see the package vignette).
 
-plot_beforeafter(
-  x             = x,
-  y             = y,
-  metadata      = meta,
-  plot_what     = c("Feature_1", "Feature_2"),
-  col_injection = "InjectionSequence",
-  col_batch     = "Batch",
-  col_group     = "Group",
-  col_qc_label  = "QC",
-  theme         = "nature"
-)
 }
+\references{
+Cleveland, W.S. (1979). Robust locally weighted regression and smoothing
+scatterplots. \emph{Journal of the American Statistical Association}, 74(368),
+829-836. \doi{10.1080/01621459.1979.10481038}
 
+Okabe, M., & Ito, K. (2008). \emph{Color Universal Design (CUD): How to make
+figures and presentations that are friendly to colorblind people.}
+\url{https://jfly.uni-koeln.de/color/}
+}
+\seealso{
+\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}}, whose effect this plot is designed to
+show.
+
+Other plotting functions:
+\code{\link[=plot_dist_beforeafter]{plot_dist_beforeafter()}}
 }
 \author{
 John Lennon L. Calorio
 }
+\concept{plotting functions}

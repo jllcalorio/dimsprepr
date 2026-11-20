@@ -1,7 +1,5 @@
 #' Plot Pairwise Before-and-After Comparison for Selected Features
 #'
-#' @title Plot Pairwise Before-and-After Comparison for Selected Features
-#'
 #' @description
 #' Generates a multi-panel plot comparing the signal of selected features
 #' before and after any data transformation, correction, or manipulation.
@@ -11,14 +9,19 @@
 #'
 #' @param x A \code{data.frame}, \code{tibble}, or \code{matrix} representing
 #'   the data \emph{before} the transformation. Rows are samples; columns are
-#'   features. Column names may contain special characters. Input can be
-#'   a \code{link{run_DIpreprocess}} class.
+#'   features. Column names may contain special characters. Alternatively, a
+#'   [run_DIpreprocess()] result: \code{x} then becomes its imputed data
+#'   (\code{$data_imputed}), \code{y} its drift/batch-corrected data
+#'   (\code{$data_corrected}), and \code{metadata} its standardized metadata,
+#'   so \code{y} and \code{metadata} can be omitted.
 #' @param y A \code{data.frame}, \code{tibble}, or \code{matrix} representing
 #'   the data \emph{after} the transformation. Must have the same dimensions
-#'   and column names as \code{x}.
+#'   and column names as \code{x}. Ignored when \code{x} is a
+#'   \code{run_DIpreprocess} result.
 #' @param metadata A \code{data.frame} containing sample-level metadata shared
 #'   by both \code{x} and \code{y}. Must have the same number of rows as
-#'   \code{x} and \code{y}.
+#'   \code{x} and \code{y}. Optional when \code{x} is a
+#'   \code{run_DIpreprocess} result.
 #' @param plot_what Character vector or \code{NULL}. Column names from \code{x} to be plotted.
 #'   If \code{NULL} (default), the function randomly selects up to 6 features.
 #'   If specific features are provided but not found, a warning is issued and they
@@ -109,46 +112,34 @@
 #'   \code{gridExtra::arrangeGrob()}) containing all feature panels. The
 #'   plot is also drawn to the active graphics device.
 #'
+#' @references
+#' Cleveland, W.S. (1979). Robust locally weighted regression and smoothing
+#' scatterplots. *Journal of the American Statistical Association*, 74(368),
+#' 829-836. \doi{10.1080/01621459.1979.10481038}
+#'
+#' Okabe, M., & Ito, K. (2008). *Color Universal Design (CUD): How to make
+#' figures and presentations that are friendly to colorblind people.*
+#' \url{https://jfly.uni-koeln.de/color/}
+#'
+#' @family plotting functions
+#' @seealso [run_driftBatchCorrect()], whose effect this plot is designed to
+#'   show.
+#'
 #' @examples
-#' \dontrun{
-#' set.seed(42)
-#' n_samples  <- 30
-#' n_features <- 4
+#' data(dims_data)
+#' data(dims_metadata)
+#' raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+#' before <- run_mvimpute(raw[, 1:6], verbose = FALSE)$data
+#' after  <- run_normalize(before, dims_metadata, method = "pqn_group",
+#'                         verbose = FALSE)$data
 #'
-#' x <- as.data.frame(
-#'   matrix(abs(rnorm(n_samples * n_features, mean = 1000, sd = 200)),
-#'          nrow = n_samples,
-#'          dimnames = list(NULL, paste0("Feature_", seq_len(n_features))))
-#' )
-#' y <- as.data.frame(x + rnorm(n_samples * n_features, sd = 50))
+#' plot_beforeafter(before, after, dims_metadata, plot_what = "mz_0001",
+#'                  x_label = "Raw", y_label = "PQN-normalized")
 #'
-#' meta <- data.frame(
-#'   InjectionSequence = seq_len(n_samples),
-#'   Batch             = rep(c("B1", "B2"), each = n_samples / 2),
-#'   Group             = rep(c("Sample", "QC"), times = c(n_samples - 6, 6))
-#' )
-#'
-#' plot_beforeafter(
-#'   x             = x,
-#'   y             = y,
-#'   metadata      = meta,
-#'   plot_what     = c("Feature_1", "Feature_2"),
-#'   col_injection = "InjectionSequence",
-#'   col_batch     = "Batch",
-#'   col_group     = "Group",
-#'   col_qc_label  = "QC",
-#'   theme         = "nature"
-#' )
-#' }
+#' # A run_DIpreprocess() result can be passed directly as `x`; it then shows
+#' # imputed vs drift-corrected data (see the package vignette).
 #'
 #' @author John Lennon L. Calorio
-#'
-#' @importFrom ggplot2 ggplot aes geom_point geom_smooth facet_wrap
-#' @importFrom ggplot2 scale_color_manual scale_shape_manual labs theme_bw theme_minimal theme_classic theme_light
-#' @importFrom ggplot2 theme_dark theme element_text element_blank element_line element_rect
-#' @importFrom ggplot2 labeller
-#' @importFrom gridExtra arrangeGrob
-#' @importFrom grid grid.newpage grid.draw textGrob gpar
 #'
 #' @export
 plot_beforeafter <- function(
@@ -179,40 +170,21 @@ plot_beforeafter <- function(
     ylab_size        = NULL
 ) {
 
-  # --- Integration with run_DIpreprocess ---
+  # --- Integration with run_DIpreprocess: drift-correction diagnostic ---
   if (inherits(x, "run_DIpreprocess")) {
-    obj_ref <- x
-    if (missing(metadata) || is.null(metadata)) {
-      # Must use unmerged metadata because data_imputed is unmerged
-      metadata <- x$metadata
-    }
-    
-    # Extract states
-    data_before <- x$data_imputed
-    data_after  <- x$data_nonpls
-    
-    # Subset to common features to ensure exact alignment
-    common_features <- intersect(colnames(data_before), colnames(data_after))
-    if (length(common_features) == 0) {
-      stop("No common features found between imputed and final non-PLS data.")
-    }
-    
-    # Overwrite x and y
-    x <- data_before[, common_features, drop = FALSE]
-    y <- data_after[, common_features, drop = FALSE]
-
-    # Use standardized column names from run_DIpreprocess metadata
+    if (!is.null(x$error))
+      stop("The run_DIpreprocess result contains an error: ", x$error, call. = FALSE)
+    if (missing(metadata) || is.null(metadata)) metadata <- x$metadata
+    col_qc_label <- if (is.null(x$parameters$qc_types)) c("QC", "SQC", "EQC") else
+      x$parameters$qc_types
+    # Imputed (before) vs drift/batch-corrected (after), on shared features
+    common <- intersect(colnames(x$data_imputed), colnames(x$data_corrected))
+    y <- x$data_corrected[, common, drop = FALSE]
+    x <- x$data_imputed[, common, drop = FALSE]
+    # Standardized column names of run_DIpreprocess()$metadata
     col_injection <- "InjectionSequence"
     col_batch     <- "Batch"
     col_group     <- "Group"
-
-    # Use qc_types from the parameters for LOESS reference
-    if (!is.null(obj_ref$parameters$qc_types)) {
-      # Evaluate because parameters might be stored as calls/symbols
-      col_qc_label <- eval(obj_ref$parameters$qc_types, envir = parent.frame())
-    } else {
-      col_qc_label <- c("QC", "SQC", "EQC") # Fallback to defaults
-    }
   }
 
   # -------------------------------------------------------------------------
@@ -269,47 +241,11 @@ plot_beforeafter <- function(
     }
   }
 
-  # -------------------------------------------------------------------------
-  # Validate and Resolve plot_what
-  # -------------------------------------------------------------------------
-  if (!is.null(plot_what)) {
-    if (!is.character(plot_what) || length(plot_what) < 1L) {
-      stop("'plot_what' must be a non-empty character vector of feature names.")
-    }
+  # Seed validation (seeding itself is done via .with_seed)
+  if (!is.null(seed) && (!is.numeric(seed) || length(seed) != 1L || is.na(seed)))
+    stop("'seed' must be a single numeric value or NULL.", call. = FALSE)
 
-    missing_features <- setdiff(plot_what, x_cols)
-    if (length(missing_features) > 0L) {
-      if (length(missing_features) == length(plot_what)) {
-        warning(
-          "The following feature(s) in 'plot_what' were not found in 'x'/'y': ",
-          paste(missing_features, collapse = ", "), ". ",
-          "Falling back to random selection.",
-          call. = FALSE
-        )
-        plot_what <- NULL
-      } else {
-        warning(
-          "The following feature(s) in 'plot_what' were not found in 'x'/'y' and will be skipped: ",
-          paste(missing_features, collapse = ", "), ".",
-          call. = FALSE
-        )
-        plot_what <- intersect(plot_what, x_cols)
-      }
-    }
-  }
-
-  if (is.null(plot_what)) {
-    if (length(x_cols) == 0L) stop("No features available in 'x' to plot.")
-
-    plot_what <- .with_seed(seed, {
-      if (length(x_cols) <= 6) x_cols else sample(x_cols, 6)
-    })
-
-    message(sprintf(
-      "Automatically selected %d random features to plot: %s",
-      length(plot_what), paste(plot_what, collapse = ", ")
-    ))
-  }
+  plot_what <- .with_seed(seed, .resolve_plot_what(plot_what, x_cols))
 
   # -------------------------------------------------------------------------
   # Input validation: scalar numerics
@@ -343,15 +279,6 @@ plot_beforeafter <- function(
   # -------------------------------------------------------------------------
   # Input validation: theme and font
   # -------------------------------------------------------------------------
-  valid_themes <- c("nature", "minimal", "classic", "bw", "light", "dark")
-  theme_choice <- tolower(theme)
-  if (!theme_choice %in% valid_themes) {
-    stop(
-      "'theme' must be one of: ", paste(valid_themes, collapse = ", "), ". ",
-      "Got: '", theme, "'."
-    )
-  }
-
   if (!is.character(font_family) || length(font_family) != 1L) {
     stop("'font_family' must be a single character string.")
   }
@@ -388,12 +315,6 @@ plot_beforeafter <- function(
     warning("'x' and 'y' are identical. No transformation may have been applied.")
   }
 
-  # Seed validation (actual seeding done via .with_seed where needed)
-  if (!is.null(seed)) {
-    if (!is.numeric(seed) || length(seed) != 1L || is.na(seed))
-      stop("'seed' must be a single numeric value or NULL.")
-  }
-
   # -------------------------------------------------------------------------
   # Font size resolution
   # Priority: explicit arg > global_font_size scale > base_size-derived default
@@ -408,40 +329,12 @@ plot_beforeafter <- function(
   r_legend_text   <- .resolve_size(NULL,          gfs_factor, base_size - 1)
   r_strip_text    <- .resolve_size(NULL,          gfs_factor, base_size)
 
-  # -------------------------------------------------------------------------
-  # Base theme construction (mirrors plot_score approach)
-  # -------------------------------------------------------------------------
-  base_theme <- switch(
-    theme_choice,
-    "nature"  = ggplot2::theme_bw(base_size = base_size, base_family = font_family) +
-      ggplot2::theme(
-        panel.grid.major = ggplot2::element_line(color = "grey92", linewidth = 0.4),
-        panel.grid.minor = ggplot2::element_blank(),
-        panel.border     = ggplot2::element_rect(color = "grey70", fill = NA, linewidth = 0.6),
-        strip.background = ggplot2::element_rect(fill = "grey95", color = "grey70"),
-        strip.text       = ggplot2::element_text(face = "bold", family = font_family,
-                                                 size = r_strip_text)
-      ),
-    "minimal" = ggplot2::theme_minimal(base_size = base_size, base_family = font_family),
-    "classic" = ggplot2::theme_classic(base_size = base_size, base_family = font_family),
-    "bw"      = ggplot2::theme_bw(base_size     = base_size, base_family = font_family),
-    "light"   = ggplot2::theme_light(base_size  = base_size, base_family = font_family),
-    "dark"    = ggplot2::theme_dark(base_size   = base_size, base_family = font_family)
-  )
-
-  custom_theme <- ggplot2::theme(
-    panel.grid.major = ggplot2::element_blank(),
-    panel.grid.minor = ggplot2::element_blank(),
-    plot.title       = ggplot2::element_text(size = r_title_size,   hjust = 0.5,
-                                             family = font_family),
-    axis.title.x     = ggplot2::element_text(size = r_xlab_size,    family = font_family),
-    axis.title.y     = ggplot2::element_text(size = r_ylab_size,    family = font_family),
-    axis.text        = ggplot2::element_text(size = r_axis_text,    family = font_family),
-    legend.title     = ggplot2::element_text(size = r_legend_title, family = font_family),
-    legend.text      = ggplot2::element_text(size = r_legend_text,  family = font_family),
-    strip.text       = ggplot2::element_text(size = r_strip_text,   face = "bold",
-                                             family = font_family)
-  )
+  base_theme   <- .build_base_theme(theme, base_size, font_family, r_strip_text)
+  custom_theme <- .build_custom_theme(font_family, r_title_size, r_xlab_size,
+                                      r_ylab_size, r_axis_text,
+                                      legend_title_size = r_legend_title,
+                                      legend_text_size  = r_legend_text,
+                                      strip_text_size   = r_strip_text)
 
   # -------------------------------------------------------------------------
   # Derive group palette dynamically (Okabe-Ito, colorblind-safe)
@@ -534,7 +427,7 @@ plot_beforeafter <- function(
       if (n_qc_obs < 3L) {
         warning(
           "Feature '", feat, "': fewer than 3 observations in the '",
-          col_qc_label, "' group (", n_qc_obs, " found). ",
+          paste(col_qc_label, collapse = ", "), "' group (", n_qc_obs, " found). ",
           "LOESS line suppressed for this feature."
         )
         draw_loess <- FALSE
@@ -543,10 +436,10 @@ plot_beforeafter <- function(
 
     p <- ggplot2::ggplot(
       plot_data,
-      ggplot2::aes(x = injection, y = value)
+      ggplot2::aes(x = .data$injection, y = .data$value)
     ) +
       ggplot2::geom_point(
-        ggplot2::aes(color = group, shape = batch),
+        ggplot2::aes(color = .data$group, shape = .data$batch),
         size  = point_size,
         alpha = point_alpha
       )
@@ -555,8 +448,8 @@ plot_beforeafter <- function(
       qc_data <- plot_data[plot_data$group %in% col_qc_label, , drop = FALSE]
       p <- p + ggplot2::geom_smooth(
         data      = qc_data,
-        method    = NULL,
-        formula   = NULL,
+        method    = "loess",
+        formula   = y ~ x,
         se        = TRUE,
         na.rm     = TRUE,
         alpha     = 0.3,

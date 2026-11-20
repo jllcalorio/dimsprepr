@@ -8,6 +8,7 @@
 #'
 #' @param x Matrix or data frame. Numeric data with samples in rows and features
 #'   in columns. Missing values should be represented as `NA`.
+#'   For `print()`, a `run_mvimpute` object.
 #' @param method Numeric or character. Controls the imputation strategy:
 #'   \itemize{
 #'     \item **Numeric** -- fraction of the smallest observed value per feature
@@ -33,7 +34,7 @@
 #' @param seed Integer or `NA`. Only used with \pkg{mice} methods. Random seed.
 #'   Default: `NA`.
 #' @param verbose Logical. Print progress messages. Default: `TRUE`.
-#' @param ... Additional arguments passed to \code{\link[mice]{mice}}.
+#' @param ... Additional arguments passed to [mice::mice()]; ignored by `print()`.
 #'
 #' @return A list of class `"run_mvimpute"` containing:
 #'   \item{data}{Matrix or data frame with imputed values (same class as input `x`).}
@@ -47,38 +48,60 @@
 #' **Missing Value Imputation Strategies:**
 #'
 #' 1. **Deterministic (fraction of minimum):** Each missing value is replaced by
-#'    a fraction of the per-feature minimum. Standard in metabolomics for MNAR data.
+#'    a fraction of the per-feature minimum. Standard in metabolomics for
+#'    missing-not-at-random (MNAR) data, where missingness mostly means the
+#'    signal fell below the detection limit (Wei et al., 2018).
 #'
-#' 2. **Quantile Regression (QRILC):** Models missing values from a
-#'    left-censored distribution. Requires \pkg{imputeLCMD}.
+#' 2. **Quantile Regression (QRILC):** Draws missing values from a truncated
+#'    normal distribution estimated by quantile regression on the observed,
+#'    left-censored data (Lazar et al., 2016), via
+#'    [imputeLCMD::impute.QRILC()]. Requires \pkg{imputeLCMD}. Note that QRILC
+#'    works on the scale of the data supplied; log-transformed input is
+#'    recommended.
 #'
-#' 3. **mice:** Multiple Imputation by Chained Equations. Requires \pkg{mice}.
+#' 3. **mice:** Multiple Imputation by Chained Equations (van Buuren &
+#'    Groothuis-Oudshoorn, 2011) via [mice::mice()], with a predictor matrix
+#'    from [mice::quickpred()] unless `predictorMatrix` is supplied in `...`.
+#'    Requires \pkg{mice}. Only the first completed data set is returned.
+#'
+#' Wei et al. (2018) compare these strategies on mass spectrometry
+#' metabolomics data.
 #'
 #' @author John Lennon L. Calorio
 #'
 #' @references
+#' Lazar, C., Gatto, L., Ferro, M., Bruley, C., & Burger, T. (2016).
+#' Accounting for the multiple natures of missing values in label-free
+#' quantitative proteomics data sets to compare imputation strategies.
+#' *Journal of Proteome Research*, 15(4), 1116-1125.
+#' \doi{10.1021/acs.jproteome.5b00981}
+#'
 #' Van Buuren, S., & Groothuis-Oudshoorn, K. (2011). mice: Multivariate
 #' Imputation by Chained Equations in R. *Journal of Statistical Software*,
 #' 45(3), 1-67. \doi{10.18637/jss.v045.i03}
 #'
-#' Wei, R., et al. (2018). Missing Value Imputation Approach for Mass
-#' Spectrometry-based Metabolomics Data. *Scientific Reports*, 8(1), 663.
-#' \doi{10.1038/s41598-017-19120-0}
+#' Wei, R., Wang, J., Su, M., Jia, E., Chen, S., Chen, T., & Ni, Y. (2018).
+#' Missing value imputation approach for mass spectrometry-based metabolomics
+#' data. *Scientific Reports*, 8(1), 663. \doi{10.1038/s41598-017-19120-0}
 #'
-#' @seealso \code{\link{run_DIpreprocess}}, \code{\link[mice]{mice}},
-#'   \code{\link[imputeLCMD]{impute.QRILC}}
+#' @family preprocessing steps
+#' @seealso [run_DIpreprocess()] for the full pipeline, [run_filtermissing()]
+#'   for the step that usually precedes imputation.
 #'
 #' @export
 #'
 #' @examples
-#' \donttest{
-#' set.seed(723)
-#' x <- matrix(abs(rnorm(100 * 50, mean = 100)), nrow = 100, ncol = 50)
-#' x[sample(length(x), 200)] <- NA
-#' colnames(x) <- paste0("Feature", 1:50)
+#' data(dims_data)
+#' x <- dims_data[, 1:20]
+#' x[x == 0] <- NA            # zeros are below-detection values
 #'
-#' result <- run_mvimpute(x, method = 0.2)
-#' result
+#' res <- run_mvimpute(x, method = 0.2)
+#' res
+#' head(res$imputed_summary)
+#'
+#' # QRILC on log-scale data (requires imputeLCMD)
+#' if (requireNamespace("imputeLCMD", quietly = TRUE)) {
+#'   run_mvimpute(log10(x), method = "quantileregression", verbose = FALSE)
 #' }
 run_mvimpute <- function(
     x,
@@ -269,8 +292,6 @@ run_mvimpute <- function(
   )
 }
 
-#' @param x Object to print.
-#' @param ... Ignored.
 #' @rdname run_mvimpute
 #' @export
 print.run_mvimpute <- function(x, ...) {

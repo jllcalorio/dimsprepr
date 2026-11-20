@@ -6,6 +6,7 @@
 #' variance-stability (VAST) scaling variants.
 #'
 #' @param x Matrix or data frame. Numeric data with samples in rows and features in columns.
+#'   For `print()`, a `run_scale` object.
 #' @param method Character. Scaling method:
 #'   \itemize{
 #'     \item \code{"mean"}: Mean-centering only
@@ -31,35 +32,60 @@
 #'   \item{parameters}{List of parameters}
 #'
 #' @details
-#' **auto**: Recommended for PCA, clustering, t-tests, ANOVA.
+#' With \eqn{\bar{x}_j} and \eqn{s_j} the mean and standard deviation of
+#' feature \eqn{j} (van den Berg et al., 2006):
 #'
-#' **pareto**: Recommended for PLS-DA, OPLS-DA.
+#' * **mean**: \eqn{x - \bar{x}_j}.
+#' * **auto** (unit variance): \eqn{(x - \bar{x}_j) / s_j}. Every feature gets
+#'   equal weight; recommended for PCA, clustering, t-tests, and ANOVA.
+#' * **pareto**: \eqn{(x - \bar{x}_j) / \sqrt{s_j}}. Shrinks large fold changes
+#'   less than auto-scaling; recommended for PLS-DA and OPLS-DA.
+#' * **vast** (variable stability; Keun et al., 2003): auto-scaled data
+#'   multiplied by \eqn{\bar{x}_j / s_j}, i.e. divided by the coefficient of
+#'   variation, which down-weights unstable features.
+#' * **svast** / **xvast**: supervised VAST variants (Yang et al., 2015) that
+#'   use the mean (svast) or maximum (xvast) of the within-group
+#'   \eqn{\bar{x} / s} ratios, so they require `metadata` and `group_col`.
+#' * **ln**: natural log of the data (a transformation, kept for backward
+#'   compatibility; prefer [run_transform()]).
 #'
-#' **vast/svast/xvast**: Variance-stability methods from Keun et al. (2003)
-#' and Yang et al. (2015).
+#' Zero-variance features get a scaling factor of 1 to avoid division by zero.
 #'
 #' @author John Lennon L. Calorio
 #'
 #' @references
-#' van den Berg, R.A., et al. (2006). BMC Genomics, 7, 142.
-#' https://doi.org/10.1186/1471-2164-7-142
+#' Keun, H.C., Ebbels, T.M.D., Antti, H., Bollard, M.E., Beckonert, O.,
+#' Holmes, E., Lindon, J.C., & Nicholson, J.K. (2003). Improved analysis of
+#' multivariate data by variable stability scaling: application to NMR-based
+#' metabolic profiling. *Analytica Chimica Acta*, 490(1-2), 265-276.
+#' \doi{10.1016/S0003-2670(03)00094-1}
 #'
-#' Yang, J., et al. (2015). Frontiers in Molecular Biosciences, 2, 4.
-#' https://doi.org/10.3389/fmolb.2015.00004
+#' van den Berg, R.A., Hoefsloot, H.C.J., Westerhuis, J.A., Smilde, A.K., &
+#' van der Werf, M.J. (2006). Centering, scaling, and transformations:
+#' improving the biological information content of metabolomics data.
+#' *BMC Genomics*, 7, 142. \doi{10.1186/1471-2164-7-142}
 #'
-#' @seealso \code{\link{run_DIpreprocess}}
+#' Yang, J., Zhao, X., Lu, X., Lin, X., & Xu, G. (2015). A data preprocessing
+#' strategy for metabolomics to reduce the mask effect in data analysis.
+#' *Frontiers in Molecular Biosciences*, 2, 4. \doi{10.3389/fmolb.2015.00004}
+#'
+#' @family preprocessing steps
+#' @seealso [run_DIpreprocess()] for the full pipeline.
 #'
 #' @export
 #'
 #' @examples
-#' \donttest{
-#' set.seed(662)
-#' x <- matrix(rnorm(100 * 50, mean = 100, sd = 50), nrow = 100, ncol = 50)
-#' colnames(x) <- paste0("Feature", 1:50)
+#' data(dims_data)
+#' data(dims_metadata)
+#' raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+#' x <- log10(run_mvimpute(raw[, 1:20], verbose = FALSE)$data)
 #'
-#' result <- run_scale(x, method = "auto")
-#' result
-#' }
+#' res <- run_scale(x, method = "pareto")
+#' res
+#' round(head(res$scaling_factors), 3)
+#'
+#' # Supervised VAST needs group labels
+#' run_scale(x, method = "svast", metadata = dims_metadata, verbose = FALSE)
 run_scale <- function(
     x,
     method    = "auto",
@@ -73,10 +99,9 @@ run_scale <- function(
   .validate_data_matrix(x)
 
   method <- tolower(method)
-  valid_methods <- c("mean", "auto", "pareto", "ln", "vast", "svast", "xvast", "none")
-  if (!method %in% valid_methods)
-    stop("Unknown scaling method '", method, "'. Supported: ",
-         paste(valid_methods, collapse = ", "), call. = FALSE)
+  if (length(method) != 1L || !method %in% .scale_methods)
+    stop("Unknown scaling method '", paste(method, collapse = ", "),
+         "'. Supported: ", paste(.scale_methods, collapse = ", "), ".", call. = FALSE)
 
   # group vector extraction for supervised VAST methods
   group_vec <- NULL
@@ -187,7 +212,6 @@ run_scale <- function(
   )
 }
 
-#' @param x Object to print.
 #' @param ... Ignored.
 #' @rdname run_scale
 #' @export

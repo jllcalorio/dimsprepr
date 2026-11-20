@@ -8,6 +8,17 @@ A key feature is its support for Cartesian product pipelines: users may supply m
 
 ## Installation
 
+`dimsprepr` depends on the Bioconductor package `pmp`. `pak` installs it
+automatically; with `install.packages()`, install it first:
+
+```R
+install.packages("BiocManager")
+BiocManager::install("pmp")
+```
+
+Optional methods use `imputeLCMD` and `mice` (imputation), `sva` (ComBat) and
+`vsn` (VSN transformation); install them if you need those methods.
+
 You can install the development version of `dimsprepr` directly from GitHub:
 
 ```R
@@ -18,6 +29,14 @@ install.packages("pak")
 pak::pak("jllcalorio/dimsprepr")
 
 ```
+## Quick start
+
+```R
+library(dimsprepr)
+res <- run_DIpreprocess(dims_data, dims_metadata)
+res$data_nonpls   # ready for PCA / univariate tests
+```
+
 ## Contributing
 
 We welcome contributions to `dimsprepr`! Please review our Code of Conduct before contributing.
@@ -32,7 +51,7 @@ This project is licensed under the MIT License.
 
 ## Acknowledgements
 
-Huge thanks to The R Project for Statistical Computing, Positron, RStudio, the developers of the dplyr, ggplot2, everything in the tidyverse package, pmp, sva, mice, and all the dependencies I fail to mention. Your work makes `dimsprepr` possible.
+Huge thanks to The R Project for Statistical Computing, Positron, RStudio, and the developers of ggplot2, pmp, sva, mice, vsn, imputeLCMD, and all the dependencies I fail to mention. Your work makes `dimsprepr` possible.
 
 ## Future Development
 

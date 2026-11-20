@@ -41,3 +41,19 @@ test_that("print.run_mvimpute works", {
   res <- run_mvimpute(td$x, method = 0.1, verbose = FALSE)
   expect_output(print(res), "Missing Value Imputation")
 })
+
+test_that("fraction-of-minimum imputation uses the per-feature positive minimum", {
+  x <- matrix(c(10, 20, NA, 4, NA, 8), 3, dimnames = list(NULL, c("a", "b")))
+  res <- run_mvimpute(x, method = 0.5, verbose = FALSE)
+  expect_equal(unname(res$data[3, "a"]), 5)
+  expect_equal(unname(res$data[2, "b"]), 2)
+})
+
+test_that("QRILC and mice back-ends fill all values", {
+  x <- log10(dims_data[, 1:8]); x[!is.finite(x)] <- NA
+  skip_if_not_installed("imputeLCMD")
+  expect_equal(run_mvimpute(x, "quantileregression", verbose = FALSE)$n_missing_after, 0L)
+  skip_if_not_installed("mice")
+  expect_equal(run_mvimpute(x, "pmm", m = 1, maxit = 1, seed = 1,
+                            verbose = FALSE)$n_missing_after, 0L)
+})

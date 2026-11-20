@@ -1,10 +1,12 @@
 #' Correct Signal Drift and Batch Effects Using QC Samples
 #'
 #' @description
-#' Applies Quality Control-based Robust Spline Correction (QCRSC) or batch correction
-#' using ComBat to remove systematic signal drift and batch effects in metabolomics data.
+#' Applies Quality Control-based Robust Spline Correction (QCRSC) or batch
+#' correction using ComBat to remove systematic signal drift and batch effects
+#' in metabolomics data.
 #'
 #' @param x Matrix or data frame. Numeric data with samples in rows and features in columns.
+#'   For `print()`, a `run_driftBatchCorrect` object.
 #' @param metadata Data frame. Sample metadata with number of rows equal to nrow(x).
 #' @param perform_correction Logical. If TRUE, perform correction; if FALSE, return
 #'   original data unchanged. Default: TRUE.
@@ -19,58 +21,91 @@
 #' @param qc_label Character. Group label identifying QC samples for QCRSC. Default: "QC".
 #' @param qc_types Character vector. Group labels converted to `qc_label` internally.
 #'   Default: c("QC", "SQC", "EQC").
-#' @param spline_smooth_param Numeric. Smoothing parameter (0-1). Default: 0.
-#' @param min_QC Integer. Minimum QC samples per batch. Default: 5.
-#' @param spar_limit Numeric vector of length 2. Spline limits. Default: c(-1.5, 1.5).
-#' @param log_scale Logical. Fit on log-transformed data. Default: TRUE.
-#' @param use_parametric Logical. Parametric ComBat adjustment. Default: TRUE.
-#' @param display_plots Logical. Diagnostic plots for ComBat. Default: FALSE.
+#' @param spline_smooth_param Numeric (0-1). Smoothing parameter (`spar`)
+#'   of the QC spline. `0` (default) chooses it per feature by
+#'   cross-validation; larger values give smoother fits.
+#' @param min_QC Integer. Minimum number of QC samples with observed values a
+#'   feature needs in a batch to be corrected; features below it are left
+#'   uncorrected. Default: 5.
+#' @param spar_limit Numeric vector of length 2. Lower and upper limits of
+#'   `spar` searched during cross-validation. Default: c(-1.5, 1.5).
+#' @param log_scale Logical. Fit the spline on log-transformed data. Default: TRUE.
+#' @param use_parametric Logical. Parametric (`TRUE`) or non-parametric
+#'   empirical Bayes priors in ComBat. Default: TRUE.
+#' @param display_plots Logical. Draw ComBat's prior diagnostic plots. Default: FALSE.
 #' @param verbose Logical. Print progress. Default: TRUE.
 #'
 #' @return A list of class `"run_driftBatchCorrect"` containing:
 #'   \item{data}{Corrected data (same class as input `x`)}
 #'   \item{data_before_correction}{Original data before correction}
 #'   \item{correction_applied}{Logical}
-#'   \item{method_used}{Character}
-#'   \item{uncorrected_features}{Character vector of uncorrected features}
+#'   \item{method_used}{Character: `"QCRSC"`, `"ComBat"`, or `"None"`}
+#'   \item{uncorrected_features}{Character vector of features left unchanged
+#'     (e.g. too few QC values)}
 #'   \item{n_uncorrected}{Integer}
 #'   \item{parameters}{List of parameters}
 #'
 #' @details
-#' **QCRSC** fits smoothing splines through QC intensities across injection order.
-#' Requires \pkg{pmp}.
+#' **QCRSC** (Quality Control-based Robust Spline Correction; Kirwan et al.,
+#' 2013) fits, per feature and batch, a smoothing spline through the QC
+#' intensities against injection order and removes that trend from every
+#' sample, correcting within-batch drift and between-batch offsets in one
+#' step. It follows the QC-based correction approach of Dunn et al. (2011). Implemented by [pmp::QCRSC()]. QC samples
+#' must be spread through every batch, starting and ending with a QC, with at
+#' least 4 (preferably 5 or more) per batch.
 #'
-#' **ComBat** uses empirical Bayes for batch correction. Requires \pkg{sva}.
+#' **ComBat** (`batch_corr_only = TRUE`; Johnson et al., 2007) uses
+#' empirical Bayes location/scale adjustment to remove batch effects without
+#' using QCs or injection order. Implemented by [sva::ComBat()]. Requires
+#' \pkg{sva}. ComBat does not accept missing values, so impute first.
+#'
+#' Batch labels may be numeric or character.
 #'
 #' @author John Lennon L. Calorio
 #'
 #' @references
-#' Kirwan, J.A., et al. (2013). Analytical and Bioanalytical Chemistry, 405, 5147-5157.
+#' Dunn, W.B., Broadhurst, D., Begley, P., Zelena, E., Francis-McIntyre, S.,
+#' Anderson, N., et al. (2011). Procedures for large-scale metabolic profiling
+#' of serum and plasma using gas chromatography and liquid chromatography
+#' coupled to mass spectrometry. *Nature Protocols*, 6(7), 1060-1083.
+#' \doi{10.1038/nprot.2011.335}
+#'
+#' Johnson, W.E., Li, C., & Rabinovic, A. (2007). Adjusting batch effects in
+#' microarray expression data using empirical Bayes methods.
+#' *Biostatistics*, 8(1), 118-127. \doi{10.1093/biostatistics/kxj037}
+#'
+#' Kirwan, J.A., Broadhurst, D.I., Davidson, R.L., & Viant, M.R. (2013).
+#' Characterising and correcting batch variation in an automated direct
+#' infusion mass spectrometry (DIMS) metabolomics workflow.
+#' *Analytical and Bioanalytical Chemistry*, 405(15), 5147-5157.
 #' \doi{10.1007/s00216-013-6856-7}
 #'
-#' Johnson, W.E., et al. (2007). Biostatistics, 8(1), 118-127.
-#' \doi{10.1093/biostatistics/kxj037}
+#' Jankevics, A., Lloyd, G.R., & Weber, R.J.M. (2025). *pmp: Peak Matrix
+#' Processing and signal batch correction for metabolomics datasets*.
+#' R package. \doi{10.18129/B9.bioc.pmp}
 #'
-#' @seealso \code{\link{run_DIpreprocess}}
+#' @family preprocessing steps
+#' @seealso [run_DIpreprocess()] for the full pipeline, [plot_beforeafter()]
+#'   to inspect the correction along the injection order.
 #'
 #' @export
 #'
 #' @examples
+#' data(dims_data)
+#' data(dims_metadata)
+#' raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+#' x <- run_mvimpute(raw[, 1:10], verbose = FALSE)$data
+#'
+#' # QC-based drift + batch correction (QCRSC)
+#' res <- run_driftBatchCorrect(x, dims_metadata, spline_smooth_param = 0.5)
+#' res
+#'
+#' # ComBat batch correction only (requires sva)
 #' \donttest{
-#' set.seed(417)
-#' n <- 60; p <- 30
-#' x <- matrix(abs(rnorm(n * p, 100, 20)), nrow = n, ncol = p)
-#' colnames(x) <- paste0("F", seq_len(p))
-#'
-#' meta <- data.frame(
-#'   InjectionSequence = seq_len(n),
-#'   Batch = rep(1:2, each = 30),
-#'   Group = rep(c(rep("Sample", 9), "QC"), 6)
-#' )
-#'
-#' # Skip correction (returns unchanged)
-#' result <- run_driftBatchCorrect(x, meta, perform_correction = FALSE)
-#' result
+#' if (requireNamespace("sva", quietly = TRUE)) {
+#'   run_driftBatchCorrect(x, dims_metadata, batch_corr_only = TRUE,
+#'                         verbose = FALSE)
+#' }
 #' }
 run_driftBatchCorrect <- function(
     x,
@@ -111,7 +146,10 @@ run_driftBatchCorrect <- function(
   x_before <- x_matrix
 
   .require_col(metadata, group_col)
+  .require_col(metadata, batch_col)
   metadata <- .add_group_collapsed(metadata, group_col, qc_types, qc_label)
+  # Batch labels may be numbers or strings ("B1"); both become integer codes.
+  batch_vector <- as.numeric(factor(metadata[[batch_col]]))
 
   uncorrected_features <- character(0)
   method_used <- NULL
@@ -121,11 +159,7 @@ run_driftBatchCorrect <- function(
     # QCRSC correction
     msg("Applying QCRSC drift and batch correction...")
 
-    for (col_name in c(injection_col, batch_col, group_col))
-      .require_col(metadata, col_name)
-
-    if (!requireNamespace("pmp", quietly = TRUE))
-      stop("Package 'pmp' required for QCRSC. Install with: BiocManager::install('pmp')", call. = FALSE)
+    .require_col(metadata, injection_col)
 
     if (!is.numeric(spline_smooth_param) || length(spline_smooth_param) != 1 ||
         spline_smooth_param < 0 || spline_smooth_param > 1)
@@ -133,41 +167,35 @@ run_driftBatchCorrect <- function(
     if (!is.numeric(spar_limit) || length(spar_limit) != 2)
       stop("'spar_limit' must be a numeric vector of length 2.", call. = FALSE)
 
+    .quiet <- if (verbose) identity else suppressMessages   # pmp messages per call
+    .qcrsc <- function(spar) .quiet(pmp::QCRSC(
+      df       = t(x_matrix),
+      order    = as.numeric(metadata[[injection_col]]),
+      batch    = batch_vector,
+      classes  = as.vector(metadata$Group_),
+      spar     = spar,
+      log      = log_scale,
+      minQC    = min_QC,
+      qc_label = qc_label,
+      spar_lim = spar_limit
+    ))
+
     tryCatch({
-      # Inner tryCatch to handle sparse-data fallback on the fly
-      x_corrected <- tryCatch({
-        pmp::QCRSC(
-          df       = t(x_matrix),
-          order    = as.numeric(metadata[[injection_col]]),
-          batch    = as.numeric(metadata[[batch_col]]),
-          classes  = as.vector(metadata$Group_),
-          spar     = spline_smooth_param,
-          log      = log_scale,
-          minQC    = min_QC,
-          qc_label = qc_label,
-          spar_lim = spar_limit
-        )
-      }, error = function(e) {
-        # ponytail: smooth.spline CV crashes when QCs are too sparse (e.g. impute_method="none").
-        # Catch the known bug and fallback to a fixed spar instead of dying.
-        if (grepl("outp", e$message, fixed = TRUE) && spline_smooth_param == 0) {
-          warning("QCRSC CV failed (likely sparse QC data). Falling back to fixed spar = 0.75.", call. = FALSE)
-          pmp::QCRSC(
-            df       = t(x_matrix),
-            order    = as.numeric(metadata[[injection_col]]),
-            batch    = as.numeric(metadata[[batch_col]]),
-            classes  = as.vector(metadata$Group_),
-            spar     = 0.75,
-            log      = log_scale,
-            minQC    = min_QC,
-            qc_label = qc_label,
-            spar_lim = spar_limit
-          )
-        } else {
+      x_corrected <- tryCatch(.qcrsc(spline_smooth_param), error = function(e) {
+        # ponytail: smooth.spline() CV inside pmp crashes ("object 'outp' not
+        # found") when a batch has too few QC values; retry once with a fixed spar.
+        if (!grepl("outp", conditionMessage(e), fixed = TRUE) || spline_smooth_param != 0)
           stop(e)
-        }
+        warning("QCRSC CV failed (likely sparse QC data). Falling back to fixed spar = 0.75.",
+                call. = FALSE)
+        tryCatch(.qcrsc(0.75), error = function(e2) stop(
+          "spline fitting failed even with a fixed spar. A batch probably has fewer ",
+          "than 4 QC samples with observed values (smooth.spline() needs >= 4). ",
+          "Add QC injections, raise 'min_QC' so such features are skipped, ",
+          "or set 'spline_smooth_param' > 0. Original error: ", conditionMessage(e2),
+          call. = FALSE))
       })
-      
+
       x_matrix <- t(x_corrected)
       method_used <- "QCRSC"
 
@@ -196,12 +224,10 @@ run_driftBatchCorrect <- function(
 
     # ComBat batch correction
     msg("Applying ComBat batch correction...")
-    .require_col(metadata, batch_col)
 
     if (!requireNamespace("sva", quietly = TRUE))
       stop("Package 'sva' required for ComBat. Install with: BiocManager::install('sva')", call. = FALSE)
 
-    batch_vector <- as.numeric(metadata[[batch_col]])
     if (length(unique(batch_vector)) < 2) {
       warning("Only one batch detected. Returning original data.", call. = FALSE)
       method_used <- "None (single batch)"
@@ -246,7 +272,6 @@ run_driftBatchCorrect <- function(
   )
 }
 
-#' @param x Object to print.
 #' @param ... Ignored.
 #' @rdname run_driftBatchCorrect
 #' @export

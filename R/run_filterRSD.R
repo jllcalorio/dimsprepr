@@ -6,6 +6,7 @@
 #' poor analytical reproducibility.
 #'
 #' @param x Matrix or data frame. Numeric data with samples in rows and features in columns.
+#'   For `print()`, a `run_filterRSD` object.
 #' @param metadata Data frame. Sample metadata with number of rows equal to nrow(x).
 #'   Must contain column specified by `group_col` to identify QC samples.
 #' @param max_rsd Numeric. Maximum allowed RSD (0-1). Features with RSD >= this
@@ -16,9 +17,10 @@
 #'   \itemize{
 #'     \item \code{"EQC"}: Extract QC samples (diluted sample pool)
 #'     \item \code{"SQC"}: Sample QC samples (undiluted sample pool)
-#'     \item \code{"QC"}: Any QC sample (use when both EQC and SQC present, or no distinction)
+#'     \item \code{"QC"}: Any QC sample, i.e. every label in \code{qc_types}
+#'       (use when both EQC and SQC are present, or there is no distinction)
 #'   }
-#'   Default: "EQC".
+#'   Default: "QC".
 #' @param qc_types Character vector. Group labels that should be treated as QC samples.
 #'   Default: c("QC", "SQC", "EQC").
 #' @param verbose Logical. Print progress messages. Default: TRUE.
@@ -36,7 +38,14 @@
 #' @details
 #' **Relative Standard Deviation (RSD):**
 #'
-#' RSD is calculated as: RSD = SD / Mean
+#' RSD is calculated per feature over the selected QC samples as
+#' RSD = SD / Mean (missing values ignored). Features whose RSD cannot be
+#' computed (e.g. no observed QC values) are removed, matching
+#' [pmp::filter_peaks_by_rsd()].
+#'
+#' **Apply to non-negative intensities**, i.e. before mean-centering or
+#' scaling; RSD of centred data is meaningless. A warning is issued if any QC
+#' mean is <= 0.
 #'
 #' Also known as coefficient of variation (CV), RSD expresses variability
 #' as a proportion of the mean, making it scale-independent and suitable
@@ -57,43 +66,47 @@
 #' - Standard: 30% (0.3) - recommended for most metabolomics studies
 #' - Lenient: 40% (0.4) - when sample size is limited
 #'
+#' Broadhurst et al. (2018) recommend removing features with QC RSD above
+#' 20% (0.2) for untargeted studies, or 30% (0.3) as a commonly used upper
+#' limit.
+#'
 #' @author John Lennon L. Calorio
 #'
 #' @references
 #' Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control, Batch Correction,
-#' Exploration & Data Cleaning (Version 2.1) Zendono. \doi{10.5281/zenodo.16824822}.
+#' Exploration & Data Cleaning (Version 2.1). Zenodo. \doi{10.5281/zenodo.16824822}.
 #' Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
 #'
-#' Jankevics A, Lloyd GR, Weber RJM (2025). pmp: Peak Matrix Processing and signal
-#' batch correction for metabolomics datasets. \doi{10.18129/B9.bioc.pmp},
-#' R package version 1.20.0, \url{https://bioconductor.org/packages/pmp}.
+#' Broadhurst, D., Goodacre, R., Reinke, S.N., Kuligowski, J., Wilson, I.D.,
+#' Lewis, M.R., & Dunn, W.B. (2018). Guidelines and considerations for the use
+#' of system suitability and quality control samples in mass spectrometry
+#' assays applied in untargeted clinical metabolomic studies.
+#' *Metabolomics*, 14(6), 72. \doi{10.1007/s11306-018-1367-3}
 #'
-#' @seealso \code{\link{run_DIpreprocess}}
+#' Jankevics, A., Lloyd, G.R., & Weber, R.J.M. (2025). *pmp: Peak Matrix
+#' Processing and signal batch correction for metabolomics datasets*.
+#' R package. \doi{10.18129/B9.bioc.pmp}
+#'
+#' @family preprocessing steps
+#' @seealso [run_DIpreprocess()] for the full pipeline.
 #'
 #' @export
 #'
 #' @examples
-#' \donttest{
-#' set.seed(814)
-#' x <- matrix(abs(rnorm(100 * 50, mean = 100, sd = 20)),
-#'             nrow = 100, ncol = 50)
-#' colnames(x) <- paste0("Feature", 1:50)
+#' data(dims_data)
+#' data(dims_metadata)
+#' raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
+#' x <- run_mvimpute(raw, verbose = FALSE)$data
 #'
-#' metadata <- data.frame(
-#'   Sample = paste0("S", 1:100),
-#'   Group = c(rep("Control", 40), rep("Treatment", 40),
-#'             rep("QC", 10), rep("EQC", 10))
-#' )
-#'
-#' result <- run_filterRSD(x, metadata, max_rsd = 0.3, qc_type = "EQC")
-#' result
-#' }
+#' res <- run_filterRSD(x, dims_metadata, max_rsd = 0.2)
+#' res
+#' round(head(res$rsd_values), 3)
 run_filterRSD <- function(
     x,
     metadata,
     max_rsd = 0.3,
     group_col = "Group",
-    qc_type = "EQC",
+    qc_type = "QC",
     qc_types = c("QC", "SQC", "EQC"),
     verbose = TRUE
 ) {
@@ -136,7 +149,7 @@ run_filterRSD <- function(
         data               = .restore_class(x_matrix, mp$was_matrix),
         features_removed   = character(0),
         features_kept      = feature_names,
-        rsd_values         = rep(NA, n_features_before),
+        rsd_values         = stats::setNames(rep(NA_real_, n_features_before), feature_names),
         n_features_before  = n_features_before,
         n_features_after   = n_features_before,
         n_features_removed = 0L,
@@ -153,27 +166,16 @@ run_filterRSD <- function(
 
   qc_means <- matrixStats::colMeans2(x_qc, na.rm = TRUE)
   qc_sds   <- matrixStats::colSds(x_qc, na.rm = TRUE)
+  if (any(qc_means <= 0, na.rm = TRUE))
+    warning("Some QC feature means are <= 0; RSD is only meaningful for ",
+            "non-negative intensities (apply RSD filtering before centering/scaling).",
+            call. = FALSE)
   rsd_values <- qc_sds / qc_means
   rsd_values[!is.finite(rsd_values)] <- NA
+  names(rsd_values) <- feature_names
 
-  # Use pmp for filtering if available, otherwise manual
-  features_kept <- if (requireNamespace("pmp", quietly = TRUE)) {
-    tryCatch({
-      filtered <- pmp::filter_peaks_by_rsd(
-        t(x_matrix),
-        max_rsd  = max_rsd * 100,
-        class    = as.vector(classes),
-        qc_label = qc_label
-      )
-      rownames(filtered)
-    }, error = function(e) {
-      warning("pmp::filter_peaks_by_rsd failed: ", e$message,
-              ". Using manual RSD filtering.", call. = FALSE)
-      feature_names[rsd_values < max_rsd | is.na(rsd_values)]
-    })
-  } else {
-    feature_names[rsd_values < max_rsd | is.na(rsd_values)]
-  }
+  # Same rule as pmp::filter_peaks_by_rsd(): features with undefined RSD are removed
+  features_kept <- feature_names[!is.na(rsd_values) & rsd_values < max_rsd]
 
   x_filtered <- x_matrix[, features_kept, drop = FALSE]
   n_features_after <- length(features_kept)
@@ -203,7 +205,6 @@ run_filterRSD <- function(
   )
 }
 
-#' @param x Object to print.
 #' @param ... Ignored.
 #' @rdname run_filterRSD
 #' @export

@@ -1,4 +1,4 @@
-# Shared test fixtures – lightweight, no external deps
+# Shared test fixtures - lightweight, no external deps
 # ponytail: one fixture set, every test file reuses it
 
 make_test_data <- function(n_samples = 30, n_features = 20, n_qc = 6, seed = 7744) {
@@ -28,4 +28,12 @@ make_test_data <- function(n_samples = 30, n_features = 20, n_qc = 6, seed = 774
   rownames(meta) <- meta$Sample
 
   list(x = x, metadata = meta)
+}
+
+# Bundled data with zeros (below detection) treated as missing and imputed,
+# which is what every step after imputation expects.
+dims_clean <- function(cols = seq_len(ncol(dims_data))) {
+  x <- dims_data[, cols, drop = FALSE]
+  x[x == 0] <- NA
+  run_mvimpute(x, verbose = FALSE)$data
 }

@@ -1,4 +1,4 @@
-# Internal validation helpers – shared across run_* functions
+# Internal validation helpers - shared across run_* functions
 # ponytail: single source of truth for repeated validation boilerplate
 
 #' Validate that x is a matrix or data frame

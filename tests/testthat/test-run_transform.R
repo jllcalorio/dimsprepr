@@ -49,3 +49,26 @@ test_that("print.run_transform works", {
   res <- run_transform(td$x, method = "log2", verbose = FALSE)
   expect_output(print(res), "Transformation Results")
 })
+
+test_that("run_transform reports shift and fallback in method_used", {
+  x <- matrix(c(-1, 0, 1, 2), 2, dimnames = list(NULL, c("a", "b")))
+  res <- run_transform(x, "log2", verbose = FALSE)
+  expect_equal(res$shift_applied, 2)
+  expect_equal(res$data, log2(x + 2))
+  expect_error(run_transform(x, c("log2", "log10")), "Unknown transformation")
+})
+
+test_that("glog requires metadata and runs on the bundled data", {
+  x <- dims_clean(1:10)
+  expect_error(run_transform(x, "glog", verbose = FALSE), "metadata")
+  res <- run_transform(x, "glog", metadata = dims_metadata, verbose = FALSE)
+  expect_equal(dim(res$data), dim(x))
+})
+
+test_that("vsn transformation runs when vsn is installed", {
+  skip_if_not_installed("vsn")
+  x <- dims_clean()
+  res <- run_transform(x, "vsn", verbose = FALSE)
+  expect_equal(dim(res$data), dim(x))
+  expect_false(anyNA(res$data))
+})
