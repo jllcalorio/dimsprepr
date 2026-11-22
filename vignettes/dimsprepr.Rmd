@@ -11,18 +11,21 @@ vignette: >
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  fig.width = 8,
-  fig.height = 6
+  fig.width = 7,
+  fig.height = 5
 )
 ```
 
 ## Introduction
 
 **dimsprepr** provides a complete, reproducible preprocessing pipeline for
-direct-injection mass spectrometry (DIMS) metabolomics data. It covers
-missing-value filtering, imputation, QC-based signal-drift and batch
-correction, normalization, transformation, quality filtering, and scaling,
-all orchestrated through a single function call.
+direct-injection mass spectrometry (DIMS) metabolomics data. It covers blank
+filtering, missing-value handling, QC-based signal-drift and batch
+correction, imputation, normalization, transformation, quality filtering,
+and scaling, all orchestrated through a single function call. Its quality
+control steps follow the QComics guidelines (González-Domínguez et al.,
+2024), and it offers the outlier-robust drift correction methods of Vynck et
+al. (2026).
 
 ## The example data
 
@@ -46,10 +49,19 @@ detection limit.
 
 `run_DIpreprocess()` executes all steps in a fixed, validated order:
 
-1. input validation, 2. outlier removal, 3. missing-value filtering,
-4. imputation, 5. drift/batch correction (QCRSC), 6. normalization,
-7. transformation, 8. quality filtering (QC-RSD and variance, on unscaled
-data), 9. scaling into a NONPLS and a PLS branch, 10. replicate merging.
+1. input validation;
+2. sample removal (listed outliers, and procedural blanks after blank
+   filtering when `blank_types` is given);
+3. missing-value handling: removal of samples with abnormally low detection
+   rates, then the modified 80% rule;
+4. drift and batch correction, on data that still contain missing values;
+5. imputation;
+6. normalization;
+7. transformation;
+8. quality filtering (QC-RSD on measured values, then variance, both on
+   unscaled data);
+9. scaling into a NONPLS and a PLS branch;
+10. replicate merging.
 
 ```{r pipeline}
 result <- run_DIpreprocess(
@@ -57,7 +69,6 @@ result <- run_DIpreprocess(
   metadata         = dims_metadata,
   normalize_method = "pqn_group",
   transform_method = "log10",
-  spline_smooth    = 0.5,
   verbose          = FALSE
 )
 
@@ -77,44 +88,86 @@ head(result$features_final)
 ## Diagnostic plots
 
 `plot_beforeafter()` shows features along the injection order, with a
-LOESS trend through the QC samples. Given a pipeline result, it compares
-the imputed data with the drift-corrected data:
+LOESS trend through the QC samples. Given a pipeline result, it compares the
+data before and after drift correction:
 
 ```{r plot-drift}
 plot_beforeafter(result, plot_what = c("mz_0002", "mz_0015"))
 ```
 
-`plot_dist_beforeafter()` compares distributions, here imputed versus the
-final auto-scaled data:
+`plot_dist_beforeafter()` compares distributions, here the imputed raw
+intensities with the final auto-scaled data:
 
 ```{r plot-dist}
-invisible(plot_dist_beforeafter(result, n_random = 20))
+plot_dist_beforeafter(result, n_random = 15)
 ```
+
+## Choosing a drift correction method
+
+`drift_method` selects the correction applied by
+`run_driftBatchCorrect()`:
+
+* `"QCRSC"` (default): a smoothing spline through the QC samples (Kirwan et
+  al., 2013);
+* `"rLOESS"`, `"rGAM"`, `"tGAM"`: outlier-robust trend models (Vynck et al.,
+  2026), which are not pulled off course by an occasional aberrant QC
+  injection. rGAM and tGAM need the **mgcv** package and can also use the
+  biological samples, with a lower weight, to estimate the drift;
+* `"ComBat"`: batch offsets only, without QCs (needs **sva**);
+* `"none"`: skip the step.
+
+Extra settings go in `drift_args`. Here, rGAM uses the biological samples
+with a 5:1 QC-to-sample weighting:
+
+```{r robust, eval = requireNamespace("mgcv", quietly = TRUE)}
+robust <- run_DIpreprocess(
+  dims_data[, 1:20], dims_metadata,
+  drift_method = "rGAM",
+  drift_args   = list(sample_weight = 0.2),
+  verbose      = FALSE
+)
+robust$dimensions
+```
+
+Features that cannot be corrected in every batch, because they have fewer
+than `min_QC` measured QC values there, are removed by default
+(`remove_uncorrected = TRUE`).
+
+## QComics quality checks
+
+* **Blanks**: with `blank_types = "Blank"`, features whose signal in study
+  samples is below 3 times their blank signal are flagged as potential
+  contaminants, those with an unstable blank signal (RSD > 15%) are removed,
+  and the blank injections are dropped (`run_filterblank()`).
+* **Failed injections**: samples whose detection rate is abnormally low
+  within their group are removed (`missing_sample_iqr`, default `3`; see
+  `result$samples_removed`).
+* **Truly absent data**: with `missing_absent_threshold = 0.7`, features
+  missing in more than 70% of a group are kept as zeros in that group
+  instead of being removed.
 
 ## Using individual functions
 
-Each step is also available as a standalone function.
+Each step is also available as a standalone function. Note that drift
+correction runs before imputation, as QC-based correction ignores missing
+values while imputed QC values would bias it.
 
 ```{r steps}
 filt  <- run_filtermissing(dims_data, dims_metadata, threshold = 0.2,
-                           verbose = FALSE)
-imp   <- run_mvimpute(filt$data, method = 0.2, verbose = FALSE)
-corr  <- run_driftBatchCorrect(imp$data, dims_metadata,
-                               spline_smooth_param = 0.5, verbose = FALSE)
-norm  <- run_normalize(corr$data, dims_metadata, method = "pqn_group",
+                           sample_iqr = 3, verbose = FALSE)
+corr  <- run_driftBatchCorrect(filt$data, filt$metadata, verbose = FALSE)
+imp   <- run_mvimpute(corr$data, method = 0.2, verbose = FALSE)
+norm  <- run_normalize(imp$data, filt$metadata, method = "pqn_group",
                        verbose = FALSE)
-rsd   <- run_filterRSD(norm$data, dims_metadata, max_rsd = 0.3, verbose = FALSE)
+rsd   <- run_filterRSD(norm$data, filt$metadata, max_rsd = 0.3, verbose = FALSE)
 trans <- run_transform(rsd$data, method = "log10", verbose = FALSE)
 varf  <- run_filtervariance(trans$data, percentile = 10, verbose = FALSE)
 sc    <- run_scale(varf$data, method = "auto", verbose = FALSE)
 
 filt
-rsd
+corr
 sc
 ```
-
-Note that `run_filtermissing()` converts zeros to `NA` before filtering, and
-`run_mvimpute()` imputes only `NA` values.
 
 ## Comparing preprocessing strategies
 
@@ -128,12 +181,30 @@ multi <- run_DIpreprocess(
   x                = dims_data,
   metadata         = dims_metadata,
   normalize_method = c("median", "pqn_group"),
-  transform_method = c("log10", "glog"),
-  spline_smooth    = 0.5,
+  transform_method = c("log10", "ln"),
   verbose          = FALSE
 )
 multi
 ```
+
+## References
+
+González-Domínguez, A., Estanyol-Torres, N., Brunius, C., Landberg, R., &
+González-Domínguez, R. (2024). QComics: Recommendations and guidelines for
+robust, easily implementable and reportable quality control of metabolomics
+data. *Analytical Chemistry*, 96(3), 1064-1072.
+<https://doi.org/10.1021/acs.analchem.3c03660>
+
+Kirwan, J.A., Broadhurst, D.I., Davidson, R.L., & Viant, M.R. (2013).
+Characterising and correcting batch variation in an automated direct
+infusion mass spectrometry (DIMS) metabolomics workflow. *Analytical and
+Bioanalytical Chemistry*, 405(15), 5147-5157.
+<https://doi.org/10.1007/s00216-013-6856-7>
+
+Vynck, M., Vangeenderhuysen, P., De Paepe, E., Nawrot, T., Plekhova, V., &
+Vanhaecke, L. (2026). Robust metabolomics data normalization across scales
+and experimental designs. *Analytical Chemistry*, 98(24), 17627-17637.
+<https://doi.org/10.1021/acs.analchem.5c06841>
 
 ## Session info
 

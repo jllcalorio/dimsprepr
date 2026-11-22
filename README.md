@@ -1,58 +1,87 @@
-# dimsprepr: An R package for end-to-end preprocessing of direct-injection metabolomics data — missing value filtering, imputation, signal drift and batch correction, normalization, transformation, scaling, and quality filtering — in a single reproducible pipeline.
+# dimsprepr
 
-`dimsprepr` provides a complete, reproducible preprocessing pipeline for direct-injection mass spectrometry (DIMS) metabolomics data. Built around a single orchestrating function, the package executes preprocessing steps — outlier removal, missing value filtering, imputation, signal drift and batch correction, normalization, transformation, scaling, and quality filtering — in a fixed, validated order, ensuring methodological consistency across studies.
+End-to-end preprocessing of direct-injection mass spectrometry (DIMS)
+metabolomics data in a single reproducible pipeline.
 
-A key feature is its support for Cartesian product pipelines: users may supply multiple normalization and transformation methods simultaneously, with computationally expensive upstream steps executed only once and shared across all method combinations. This enables systematic, side-by-side comparison of preprocessing strategies within a single function call.
+`dimsprepr` runs the preprocessing steps of a DIMS metabolomics study in a
+fixed, validated order:
 
-`dimsprepr` is designed for metabolomics researchers who need a structured, auditable preprocessing workflow ready for downstream statistical analysis.
+1. sample removal (listed outliers, and procedural blanks after blank
+   filtering);
+2. missing-value handling (failed injections, the modified 80% rule, and
+   optionally truly absent data);
+3. QC-based signal drift and batch correction;
+4. imputation;
+5. normalization;
+6. transformation;
+7. QC-RSD and variance filtering;
+8. scaling;
+9. replicate merging.
+
+Its quality control steps follow the QComics guidelines
+([González-Domínguez et al., 2024](https://doi.org/10.1021/acs.analchem.3c03660)).
+Drift correction offers the QC-RSC spline
+([Kirwan et al., 2013](https://doi.org/10.1007/s00216-013-6856-7)) and the
+outlier-robust rLOESS, rGAM, and tGAM methods
+([Vynck et al., 2026](https://doi.org/10.1021/acs.analchem.5c06841)).
+
+Several normalization, transformation, and scaling methods can be supplied
+at once: the pipeline computes every combination while running the shared
+upstream steps only once, for side-by-side comparison of preprocessing
+strategies.
 
 ## Installation
 
-`dimsprepr` depends on the Bioconductor package `pmp`. `pak` installs it
-automatically; with `install.packages()`, install it first:
+Install the development version from GitHub:
 
-```R
-install.packages("BiocManager")
-BiocManager::install("pmp")
-```
-
-Optional methods use `imputeLCMD` and `mice` (imputation), `sva` (ComBat) and
-`vsn` (VSN transformation); install them if you need those methods.
-
-You can install the development version of `dimsprepr` directly from GitHub:
-
-```R
-# Install pak if you haven't already
-install.packages("pak")
-
-# Install the GitHub package
+```r
+# install.packages("pak")
 pak::pak("jllcalorio/dimsprepr")
-
 ```
+
+The default pipeline needs no Bioconductor packages. Optional methods use
+`mgcv` (robust tGAM/rGAM drift correction), `imputeLCMD` and `mice`
+(imputation), `sva` (ComBat), `pmp` (glog transformation), and `vsn` (VSN
+transformation). Install them if you need those methods; the Bioconductor
+ones (`pmp`, `sva`, `vsn`, `imputeLCMD`'s dependencies) via `BiocManager`:
+
+```r
+install.packages("BiocManager")
+BiocManager::install(c("pmp", "sva", "vsn"))
+```
+
 ## Quick start
 
-```R
+```r
 library(dimsprepr)
+
 res <- run_DIpreprocess(dims_data, dims_metadata)
-res$data_nonpls   # ready for PCA / univariate tests
+res                 # summary of what was removed and kept
+res$data_nonpls     # auto-scaled: PCA, clustering, univariate tests
+res$data_pls        # Pareto-scaled: PLS-DA / OPLS-DA
+
+plot_beforeafter(res)          # drift correction along the injection order
+plot_dist_beforeafter(res)     # distributions before and after
 ```
+
+See `vignette("dimsprepr")` for a walk-through.
 
 ## Contributing
 
-We welcome contributions to `dimsprepr`! Please review our Code of Conduct before contributing.
+Contributions are welcome. Please review the Code of Conduct before
+contributing.
 
-## Reporting Bugs
+## Reporting bugs
 
-If you encounter any bugs or have feature requests, please open an issue on our GitHub Issues page.
+Please report bugs and feature requests on the
+[GitHub issues page](https://github.com/jllcalorio/dimsprepr/issues).
 
 ## License
 
-This project is licensed under the MIT License.
+MIT. See `LICENSE`.
 
 ## Acknowledgements
 
-Huge thanks to The R Project for Statistical Computing, Positron, RStudio, and the developers of ggplot2, pmp, sva, mice, vsn, imputeLCMD, and all the dependencies I fail to mention. Your work makes `dimsprepr` possible.
-
-## Future Development
-
-More functions are continuously being added to `dimsprepr` to further enhance its capabilities and ease of use. Stay tuned for updates!
+Thanks to the R Project for Statistical Computing, Positron, RStudio, and the
+developers of ggplot2, mgcv, pmp, sva, mice, vsn, imputeLCMD, and all the
+other dependencies.
