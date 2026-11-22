@@ -10,8 +10,16 @@ This is a new release.
   Maintainer: 'John Lennon Calorio <jllcalorio@gmail.com>'
   New submission
 
+  Possibly misspelled words in DESCRIPTION: Broadhurst, Dieterle, Kirwan,
+  Vynck, et al, QComics, Metabolomics, metabolomics, spectrometry
+
+  These are correctly spelled: author surnames of the cited methods, the
+  name of the QComics guidelines, and domain terms.
+
 ## Test environments
 
+* win-builder: R 4.6.2 (release) and R-devel (2026-11-17 r90926), both
+  1 NOTE (above).
 * local Windows 11 x64, R 4.5.2: `R CMD check --as-cran --run-donttest`,
   with remote URL checks, with all suggested packages installed and again
   with `_R_CHECK_DEPENDS_ONLY_=true` (no suggested packages available).
