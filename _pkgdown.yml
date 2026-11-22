@@ -70,8 +70,9 @@ reference:
       - starts_with("run_DIpreprocess")
 
   - title: "Data Cleaning & Quality Control"
-    desc: "Filtering features based on missingness, variance, or RSD thresholds."
+    desc: "Filtering blanks, and features based on missingness, variance, or RSD thresholds."
     contents:
+      - starts_with("run_filterblank")
       - starts_with("run_filtermissing")
       - starts_with("run_filterRSD")
       - starts_with("run_filtervariance")

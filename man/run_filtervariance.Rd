@@ -60,12 +60,14 @@ Variance filtering is independent of the outcome labels, so it does not
 bias downstream tests while reducing the multiple-testing burden
 (Hackstadt & Hess, 2009).
 
-\strong{Apply before scaling.} Auto-scaling sets every feature's variance to 1,
-and mean-centering/Pareto scaling distort the ranking, so run this filter on
-normalized or transformed data. \code{\link[=run_DIpreprocess]{run_DIpreprocess()}} does this for you.
+\strong{Apply before scaling.} Auto-scaling sets every feature's variance to 1
+(and VAST scaling reweights it), so the variance ranking is lost; run this
+filter on normalized or transformed data. \code{\link[=run_DIpreprocess]{run_DIpreprocess()}} does this
+for you.
 
 Features with zero or non-finite variance are always removed. Features with
-variance at or below the percentile cutoff are removed.
+variance at or below the percentile cutoff are removed (none when
+\code{percentile = 0}).
 }
 \examples{
 data(dims_data)
@@ -92,6 +94,7 @@ Other preprocessing steps:
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
 \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
 \code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filterblank]{run_filterblank()}},
 \code{\link[=run_filtermissing]{run_filtermissing()}},
 \code{\link[=run_mvimpute]{run_mvimpute()}},
 \code{\link[=run_normalize]{run_normalize()}},

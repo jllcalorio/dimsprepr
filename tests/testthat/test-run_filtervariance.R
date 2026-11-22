@@ -33,3 +33,10 @@ test_that("lowest-variance features are removed first", {
   expect_true(all(c("F1", "F2") %in% res$features_removed))
   expect_true("F10" %in% res$features_kept)
 })
+
+test_that("percentile = 0 removes only zero-variance features", {
+  x <- cbind(const = 5, sapply(1:5, function(s) c(0, s)))
+  colnames(x) <- c("const", paste0("F", 1:5))
+  res <- suppressWarnings(run_filtervariance(x, percentile = 0, verbose = FALSE))
+  expect_identical(res$features_removed, "const")
+})

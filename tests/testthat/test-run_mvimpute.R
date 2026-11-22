@@ -54,6 +54,9 @@ test_that("QRILC and mice back-ends fill all values", {
   skip_if_not_installed("imputeLCMD")
   expect_equal(run_mvimpute(x, "quantileregression", verbose = FALSE)$n_missing_after, 0L)
   skip_if_not_installed("mice")
-  expect_equal(run_mvimpute(x, "pmm", m = 1, maxit = 1, seed = 1,
-                            verbose = FALSE)$n_missing_after, 0L)
+  # non-syntactic feature names, as in real data
+  colnames(x) <- paste0(seq_len(ncol(x)), "@0.7")
+  res <- run_mvimpute(x, "pmm", maxit = 1, seed = 1, verbose = FALSE)
+  expect_equal(res$n_missing_after, 0L)
+  expect_identical(colnames(res$data), colnames(x))
 })

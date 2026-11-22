@@ -15,7 +15,7 @@ run_normalize(
   qc_normalize = "none",
   group_col = "Group",
   qc_types = c("QC", "SQC", "EQC"),
-  reference_method = "mean",
+  reference_method = "median",
   sample_id_col = "Sample",
   verbose = TRUE
 )
@@ -23,89 +23,86 @@ run_normalize(
 \method{print}{run_normalize}(x, ...)
 }
 \arguments{
-\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
+\item{x}{Matrix or data frame. Non-negative intensities with samples in
+rows and features in columns. Missing values are ignored when computing
+the factors.
 For \code{print()}, a \code{run_normalize} object.}
 
-\item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).}
+\item{metadata}{Data frame. Sample metadata with \code{nrow(metadata) == nrow(x)}.}
 
 \item{method}{Character or numeric vector. Normalization method:
 \itemize{
-\item \code{"sum"}: Total sum normalization (divide each sample by its row sum)
-\item \code{"median"}: Median normalization (divide each sample by its row median)
-\item \code{"specific_factor"}: Divide by values from the \code{factor_col}
+\item \code{"sum"}: total sum (divide each sample by its row sum)
+\item \code{"median"}: divide each sample by its median
+\item \code{"specific_factor"}: divide by the values in the \code{factor_col}
 metadata column (e.g. osmolality or creatinine)
-\item \code{"pqn_global"}: Probabilistic quotient normalization (PQN) with the
-median spectrum of all samples as reference
+\item \code{"pqn_global"}: probabilistic quotient normalization (PQN) with
+the reference spectrum computed from all samples
 \item \code{"pqn_reference"}: PQN with one sample (\code{ref_sample}) as reference
-\item \code{"pqn_group"}: PQN with the median spectrum of the
-\code{group_sample} samples (pooled QCs by default) as reference
-\item \code{"pqn"}: PQN via \code{\link[pmp:pqn_normalisation]{pmp::pqn_normalisation()}} with the QC
-samples as reference
-\item \code{"quantile"}: Alias for \code{"pqn"}, kept for backward
-compatibility. Note this is \emph{not} quantile normalization.
-\item \code{"col_rel_abundance"}: Relative abundance per column (feature)
-\item \code{"row_rel_abundance"}: Relative abundance per row (sample)
-\item \code{"none"}: No normalization
-\item Numeric vector: custom factors, one per non-QC sample
+\item \code{"pqn_group"}: PQN with the reference spectrum computed from the
+\code{group_sample} samples (pooled QCs by default)
+\item \code{"none"}: no normalization
+\item a numeric vector: custom factors, one per non-QC sample
 }
-When \code{method} is a column name in \code{metadata}, that column is used
-as normalization factors (equivalent to \code{"specific_factor"}).}
+When \code{method} is a column name in \code{metadata}, that column supplies the
+factors (equivalent to \code{"specific_factor"}).}
 
-\item{factor_col}{Character. Metadata column with normalization factors.
-Default: "Normalization". Ignored if \code{method} is a metadata column name.}
+\item{factor_col}{Character. Metadata column with normalization factors for
+\code{"specific_factor"}. Default: \code{"Normalization"}.}
 
-\item{ref_sample}{Character. Sample identifier (in \code{sample_id_col}) used
-as reference for \code{"pqn_reference"}. Default: NULL.}
+\item{ref_sample}{Character. Sample identifier (in \code{sample_id_col}) used as
+reference for \code{"pqn_reference"}. Default: \code{NULL}.}
 
-\item{group_sample}{Character. Group label(s) whose median spectrum is the
-reference for \code{"pqn_group"}. Matches either the collapsed QC label
-\code{"QC"} (any of \code{qc_types}) or a raw label in \code{group_col}
-such as \code{"SQC"}. Default: "QC".}
+\item{group_sample}{Character. Group label(s) whose samples form the
+reference for \code{"pqn_group"}. Matches either the collapsed QC label \code{"QC"}
+(any of \code{qc_types}) or a raw label in \code{group_col} such as \code{"SQC"}.
+Default: \code{"QC"}.}
 
 \item{qc_normalize}{Character. How QC samples are scaled when sample factors
-are supplied (numeric \code{method} or \code{"specific_factor"}), since QCs
-usually have no factor of their own: \code{"mean"} or \code{"median"} of the
-sample factors, or \code{"none"} (divide by 1). Default: "none".}
+are supplied (numeric \code{method} or \code{"specific_factor"}), since QCs usually
+have no factor of their own: \code{"mean"} or \code{"median"} of the sample factors,
+or \code{"none"} (divide by 1). Default: \code{"none"}.}
 
-\item{group_col}{Character. Column with group labels. Default: "Group".}
+\item{group_col}{Character. Column with group labels. Default: \code{"Group"}.}
 
-\item{qc_types}{Character vector. QC group labels. Default: c("QC", "SQC", "EQC").}
+\item{qc_types}{Character vector. QC group labels.
+Default: \code{c("QC", "SQC", "EQC")}.}
 
-\item{reference_method}{Character. Reference method for PQN via pmp: "mean" or "median".
-Default: "mean".}
+\item{reference_method}{Character. How the PQN reference spectrum is formed
+from its samples: \code{"median"} (default; Dieterle et al., 2006) or
+\code{"mean"}.}
 
-\item{sample_id_col}{Character. Column with sample identifiers. Default: "Sample".}
+\item{sample_id_col}{Character. Column with sample identifiers, used by
+\code{"pqn_reference"}. Default: \code{"Sample"}.}
 
-\item{verbose}{Logical. Print progress. Default: TRUE.}
+\item{verbose}{Logical. Print progress messages. Default: \code{TRUE}.}
 
 \item{...}{Ignored.}
 }
 \value{
 A list of class \code{"run_normalize"} containing:
-\item{data}{Normalized data (same class as input \code{x})}
+\item{data}{Normalized data (same class as \code{x}).}
 \item{normalization_factors}{Numeric vector with the factor each sample
-was divided by}
-\item{method_used}{Character describing method}
-\item{parameters}{List of parameters}
+was divided by.}
+\item{method_used}{Character describing the method.}
+\item{parameters}{List of parameters used.}
 }
 \description{
-Applies various normalization methods to account for dilution effects and
-sample-to-sample variation in metabolomics data.
+Divides each sample by a normalization factor to remove dilution effects
+and other unwanted sample-to-sample variation in overall concentration.
 }
 \details{
-Normalization removes unwanted sample-to-sample variation such as
-dilution, which is especially large in urine. Every method divides each
-sample (row) by one factor.
+Normalization removes unwanted variation in overall sample concentration,
+such as dilution, which is especially large in urine. Every method divides
+each sample (row) by one factor.
 
 PQN (Dieterle et al., 2006) computes, for each sample, the median of the
 feature-wise quotients between that sample and a reference spectrum. It is
 more robust than sum normalization when a few features change strongly.
-The \code{"pqn"} / \code{"quantile"} options delegate to
-\code{\link[pmp:pqn_normalisation]{pmp::pqn_normalisation()}} (Jankevics et al., 2025), falling back to
-\code{"sum"} with a warning if it fails.
+Quotients that are not finite (zero reference) are ignored.
 
-Missing values are ignored when computing factors. Any \code{Inf} created
-by a zero factor is replaced with \code{NA}.
+Missing values are ignored when computing factors. Any \code{Inf} created by a
+zero factor is replaced with \code{NA}.
 }
 \examples{
 data(dims_data)
@@ -128,10 +125,6 @@ Dieterle, F., Ross, A., Schlotterbeck, G., & Senn, H. (2006). Probabilistic
 quotient normalization as robust method to account for dilution of complex
 biological mixtures. Application in 1H NMR metabonomics.
 \emph{Analytical Chemistry}, 78(13), 4281-4290. \doi{10.1021/ac051632c}
-
-Jankevics, A., Lloyd, G.R., & Weber, R.J.M. (2025). \emph{pmp: Peak Matrix
-Processing and signal batch correction for metabolomics datasets}.
-R package. \doi{10.18129/B9.bioc.pmp}
 }
 \seealso{
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}} for the full pipeline, \code{\link[=run_transform]{run_transform()}} for
@@ -141,6 +134,7 @@ Other preprocessing steps:
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
 \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
 \code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filterblank]{run_filterblank()}},
 \code{\link[=run_filtermissing]{run_filtermissing()}},
 \code{\link[=run_filtervariance]{run_filtervariance()}},
 \code{\link[=run_mvimpute]{run_mvimpute()}},

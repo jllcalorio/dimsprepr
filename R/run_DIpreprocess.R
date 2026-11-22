@@ -8,17 +8,16 @@
 #' When `normalize_method`, `transform_method`, `scale_nonpls`, and/or
 #' `scale_pls` are supplied as character vectors with more than one element,
 #' \strong{all combinations} are computed with three levels of deduplication:
-#' (1) the steps prior to normalization (validation, outlier removal,
-#' missing-value filtering, imputation, and drift/batch correction) run
-#' \strong{only once}; (2) normalization, transformation, and quality filtering
-#' run \strong{once per unique normalize x transform pair}; (3) scaling and
+#' (1) the steps up to and including imputation run \strong{only once};
+#' (2) normalization, transformation, and quality filtering run
+#' \strong{once per unique normalize x transform pair}; (3) scaling and
 #' replicate merging run \strong{once per full combination}. The return value
-#' in this case is a list of class `"run_DIpreprocess_multi"` whose elements
-#' are standard `run_DIpreprocess` objects (see Value for their names).
+#' is then a list of class `"run_DIpreprocess_multi"` whose elements are
+#' standard `run_DIpreprocess` objects (see Value for their names).
 #'
-#' @param x Matrix or data frame. Numeric feature data with \strong{samples in rows}
-#'   and \strong{features in columns}. All values should be non-negative raw intensities;
-#'   zeros are treated as missing internally.
+#' @param x Matrix or data frame. Numeric feature data with \strong{samples in
+#'   rows} and \strong{features in columns}. All values should be non-negative
+#'   raw intensities; zeros are treated as missing.
 #'   For `print()`, a `run_DIpreprocess` or `run_DIpreprocess_multi` object.
 #' @param metadata Data frame. Sample metadata with `nrow(metadata) == nrow(x)`,
 #'   in the same row order as `x`. At minimum, the group column (default
@@ -33,8 +32,8 @@
 #' @param batch_col Character. Column in `metadata` containing batch labels
 #'   (numeric or character). Required for drift correction. Default: `"Batch"`.
 #' @param injection_col Character. Column in `metadata` containing the numeric
-#'   injection order (unique values). Required for drift correction. Default:
-#'   `"InjectionSequence"`.
+#'   injection order (unique values). Required for QC-based drift correction.
+#'   Default: `"InjectionSequence"`.
 #' @param norm_factor_col Character or `NULL`. Column in `metadata`
 #'   containing sample-specific normalization factors (e.g. creatinine
 #'   concentrations or osmolality for urine). Default: `NULL`.
@@ -55,38 +54,48 @@
 #'   subject identifiers for technical-replicate merging. Default: `"SubjectID"`.
 #' @param outliers Character vector or `NULL`. Sample identifiers (row names
 #'   after applying `sample_id_col`) to remove before processing. Default: `NULL`.
-#' @param missing_threshold Numeric \[0, 1\]. Passed to [run_filtermissing()]
-#'   as `threshold`. Default: `0.2`.
+#' @param blank_types Character vector or `NULL`. Labels in `group_col` of
+#'   procedural blank samples. When given, potential contaminants are flagged
+#'   and the unstable ones removed with [run_filterblank()] (QComics rules),
+#'   and the blank samples are then dropped. Default: `NULL` (no blank step).
+#' @param missing_threshold Numeric \[0, 1\]. Maximum proportion of missing
+#'   values allowed, passed to [run_filtermissing()] as `threshold`.
+#'   Default: `0.2`.
 #' @param missing_by_group Logical. If `TRUE`, assess missingness per group.
 #'   Default: `TRUE`.
 #' @param missing_any_group Logical. Only used when `missing_by_group = TRUE`.
-#'   If `TRUE` (default), a feature is retained if its missingness is below
-#'   the threshold in at least one group (Modified 80% Rule). If `FALSE`,
-#'   it must satisfy the threshold in all groups.
+#'   If `TRUE` (default), a feature is retained if it passes the threshold in
+#'   at least one group (modified 80% rule). If `FALSE`, it must pass in all
+#'   groups.
 #' @param missing_include_qc Logical. If `TRUE`, include QC samples when
 #'   assessing missingness. Default: `FALSE`.
+#' @param missing_absent_threshold Numeric or `NULL`. Passed to
+#'   [run_filtermissing()] as `absent_threshold`: features missing in more
+#'   than this proportion of a group are kept as truly absent (zeros) there
+#'   (QComics uses `0.7`). Default: `NULL` (off).
+#' @param missing_sample_iqr Numeric or `NULL`. Passed to
+#'   [run_filtermissing()] as `sample_iqr`: samples whose missingness over the
+#'   commonly detected features is abnormally high within their group (more
+#'   than `missing_sample_iqr` interquartile ranges above the third quartile)
+#'   are removed as likely failed injections, as QComics recommends. `NULL`
+#'   disables the check. Default: `3`.
+#' @param drift_method Character. Signal drift and batch correction method
+#'   passed to [run_driftBatchCorrect()]: `"QCRSC"` (default), `"tGAM"`,
+#'   `"rGAM"`, `"rLOESS"`, `"ComBat"`, or `"none"` to skip the step.
+#' @param drift_args Named list of further arguments for
+#'   [run_driftBatchCorrect()], e.g.
+#'   `list(spline_smooth_param = 0.5, min_QC = 4)` or
+#'   `list(sample_weight = 0.2, qc_check = TRUE)`. Default: `list()`.
+#' @param remove_uncorrected Logical. If `TRUE` (default), remove features
+#'   that drift correction could not correct in every batch (too few QC
+#'   values). If `FALSE`, keep them with their original values in those
+#'   batches. See [run_driftBatchCorrect()].
 #' @param impute_method Imputation method passed to [run_mvimpute()] as
 #'   `method`: a fraction (e.g. `0.2` = one fifth of the smallest positive
 #'   value per feature), `"quantileregression"`, a \pkg{mice} method, or
-#'   `"none"`. Default: `0.2`.
-#' @param impute_method_post_drift Imputation method for any missing values
-#'   remaining (or introduced) after drift correction. If `NULL` (default),
-#'   takes on the value of `impute_method`.
+#'   `"none"`. Imputation runs once, after drift correction. Default: `0.2`.
 #' @param positive_only Logical. If `TRUE`, the minimum used by fractional
 #'   imputation only considers positive values. Default: `TRUE`.
-#' @param correct_drift Logical. If `TRUE`, apply QCRSC drift and batch
-#'   correction via [run_driftBatchCorrect()]. Default: `TRUE`.
-#' @param remove_uncorrected Logical. If `TRUE`, remove features QCRSC
-#'   could not correct. Default: `FALSE`.
-#' @param spline_smooth Numeric \[0, 1\]. QCRSC spline smoothing parameter;
-#'   `0` selects it by cross-validation. Default: `0`.
-#' @param spline_spar_limit Numeric vector of length 2. Lower/upper bounds of
-#'   the smoothing parameter searched during cross-validation.
-#'   Default: `c(-1.5, 1.5)`.
-#' @param correct_on_log Logical. If `TRUE`, fit the QC spline on
-#'   log-transformed data. Default: `TRUE`.
-#' @param min_qc_per_batch Integer. Minimum QC samples per batch for a feature
-#'   to be corrected. Default: `5`.
 #' @param normalize_method Character or character vector. One or more
 #'   normalization methods (see [run_normalize()] for details). When multiple
 #'   methods are supplied every method is paired with every element of
@@ -95,12 +104,9 @@
 #'     \item `"sum"`: Normalizes by sum.
 #'     \item `"median"`: Normalizes by median.
 #'     \item `"specific_factor"`: Uses external factors in `norm_factor_col`.
-#'     \item `"pqn_global"`: PQN using the median of all samples as reference.
+#'     \item `"pqn_global"`: PQN using all samples as reference.
 #'     \item `"pqn_reference"`: PQN using `normalize_ref_sample` as reference.
 #'     \item `"pqn_group"`: PQN using pooled QC samples as reference.
-#'     \item `"pqn"`, `"quantile"`: PQN via \pkg{pmp} (`"quantile"` is an
-#'       alias kept for backward compatibility; it is not quantile normalization).
-#'     \item `"col_rel_abundance"`, `"row_rel_abundance"`: relative abundance.
 #'     \item `"none"`: No normalization.
 #'   }
 #'   Default: `"median"`.
@@ -109,11 +115,18 @@
 #' @param normalize_qc_method Character. How QC samples are scaled when
 #'   sample factors are used: `"mean"`, `"median"`, or `"none"`. Default: `"none"`.
 #' @param transform_method Character or character vector. One or more
-#'   transformation methods (see [run_transform()]): `"log2"`, `"log10"`,
-#'   `"sqrt"`, `"cbrt"`, `"clr"`, `"arcsin_sqrt"`, `"vsn"`, `"glog"`, or
-#'   `"none"`. When multiple methods are supplied every method is paired with
-#'   every element of `normalize_method` (Cartesian product).
+#'   transformation methods (see [run_transform()]): `"ln"`, `"log2"`,
+#'   `"log10"`, `"sqrt"`, `"cbrt"`, `"clr"`, `"arcsin_sqrt"`, `"vsn"`,
+#'   `"glog"`, or `"none"`. When multiple methods are supplied every method is
+#'   paired with every element of `normalize_method` (Cartesian product).
 #'   Default: `"log10"`.
+#' @param rsd_threshold Numeric \[0, 1\]. Features with QC RSD at or above this
+#'   value are removed ([run_filterRSD()]). Default: `0.3`.
+#' @param rsd_qc_type Character. QC samples used for the RSD filter: `"QC"`
+#'   (all `qc_types`), or one or more specific labels such as `"EQC"`.
+#'   Default: `"QC"`.
+#' @param variance_percentile Numeric \[0, 100\]. Features in this bottom
+#'   percentile of variance are removed ([run_filtervariance()]). Default: `10`.
 #' @param scale_nonpls Character or character vector. One or more scaling
 #'   methods (see [run_scale()]) for the NONPLS branch, intended for PCA,
 #'   clustering, and univariate tests. When multiple methods are supplied,
@@ -123,13 +136,6 @@
 #' @param scale_pls Character or character vector. One or more scaling
 #'   methods for the PLS branch, intended for PLS-DA/OPLS-DA. Default:
 #'   `"pareto"`.
-#' @param rsd_threshold Numeric \[0, 1\]. Features with QC RSD at or above this
-#'   value are removed ([run_filterRSD()]). Default: `0.3`.
-#' @param rsd_qc_type Character. QC type used for the RSD filter: `"QC"` (all
-#'   `qc_types`), or one specific label such as `"EQC"` or `"SQC"`.
-#'   Default: `"QC"`.
-#' @param variance_percentile Numeric \[0, 100\]. Features in this bottom
-#'   percentile of variance are removed ([run_filtervariance()]). Default: `10`.
 #' @param merge_replicates Logical. Average technical replicates (non-QC rows
 #'   sharing a `subject_id_col` value). Default: `FALSE`.
 #' @param track Character vector or `NULL`. Feature names to monitor across
@@ -137,6 +143,8 @@
 #'   (e.g., missingness percentage, RSD value) are recorded in `$track`.
 #'   Default: `NULL`.
 #' @param verbose Logical. Print progress. Default: `TRUE`.
+#' @param object A `run_DIpreprocess` or `run_DIpreprocess_multi` object.
+#' @param ... Ignored.
 #'
 #' @return
 #' \describe{
@@ -145,17 +153,21 @@
 #'     \describe{
 #'       \item{`data_nonpls`, `data_pls`}{Final data for the NONPLS and PLS
 #'         branches (scaled with `scale_nonpls` / `scale_pls`).}
-#'       \item{`data_raw`, `data_missing_filtered`, `data_imputed`,
-#'         `data_corrected`, `data_normalized`, `data_transformed`}{Data
-#'         after each step (`data_normalized`/`data_transformed` are
-#'         restricted to `features_final`).}
+#'       \item{`data_raw`, `data_missing_filtered`, `data_corrected`,
+#'         `data_imputed`, `data_normalized`, `data_transformed`}{Data after
+#'         each step (`data_normalized`/`data_transformed` are restricted to
+#'         `features_final`). `data_raw` has zeros as `NA`; missing values
+#'         remain up to `data_corrected`.}
 #'       \item{`data_nonpls_merged`, `data_pls_merged`, `metadata_merged`}{
 #'         Replicate-merged data and metadata, or `NULL`.}
 #'       \item{`metadata`}{Standardized metadata with columns `Sample`,
 #'         `Group`, `Group_` (QC types collapsed to `"QC"`), `Batch`,
 #'         `InjectionSequence`, `SubjectID`.}
 #'       \item{`features_final`}{Features that passed every filter.}
-#'       \item{`uncorrected_features`}{Features QCRSC could not correct.}
+#'       \item{`samples_removed`}{Samples removed for abnormally high
+#'         missingness (see `missing_sample_iqr`).}
+#'       \item{`uncorrected_features`}{Features drift correction could not
+#'         correct in every batch.}
 #'       \item{`dimensions`}{Data frame of samples x features after each step.}
 #'       \item{`track`}{Data frame recording why tracked features were removed.}
 #'       \item{`parameters`}{List of parameter values used.}
@@ -170,47 +182,62 @@
 #'     (e.g. `median_log10_auto`, `median_log10_auto_pareto`).
 #'     Scale components are appended only for those arguments that have more
 #'     than one unique value: `scale_nonpls` first, then `scale_pls`.
-#'     The shared pre-normalization data (post-drift-correction) is stored in
-#'     the `shared` attribute of the returned list.}
+#'     The shared data (up to imputation) is stored in the `shared` attribute
+#'     of the returned list.}
 #' }
 #'
 #' @details
 #' \strong{Preprocessing Workflow (Fixed Order):}
 #' \enumerate{
 #'   \item Input validation
-#'   \item Outlier removal
-#'   \item Missing-value filtering ([run_filtermissing()])
+#'   \item Sample removal: `outliers`, then blank filtering and blank removal
+#'     ([run_filterblank()]) when `blank_types` is given
+#'   \item Zeros to `NA`, then missing-value handling ([run_filtermissing()]):
+#'     removal of samples with abnormally low detection rates, feature
+#'     filtering, and optional truly-absent zeros
+#'   \item Signal drift and batch correction ([run_driftBatchCorrect()]),
+#'     on data that still contain missing values
 #'   \item Missing-value imputation ([run_mvimpute()])
-#'   \item Signal drift and batch correction ([run_driftBatchCorrect()])
 #'   \item \emph{\[Per normalize x transform pair\]} Normalization
 #'     ([run_normalize()])
 #'   \item \emph{\[Per normalize x transform pair\]} Transformation
 #'     ([run_transform()])
 #'   \item \emph{\[Per normalize x transform pair\]} Quality filtering:
-#'     QC-RSD on the normalized data ([run_filterRSD()]), then variance on the
-#'     transformed data ([run_filtervariance()])
+#'     QC-RSD on the measured (non-imputed) normalized values
+#'     ([run_filterRSD()]), then variance on the transformed data
+#'     ([run_filtervariance()])
 #'   \item \emph{\[Per full combination\]} Scaling ([run_scale()]) of the
 #'     NONPLS and PLS branches
 #'   \item \emph{\[Per full combination\]} Technical-replicate merging
 #' }
 #'
-#' Quality filtering is done \emph{before} scaling because the RSD of
-#' mean-centred data and the variance of auto-scaled data (always 1) carry no
-#' information. Both branches therefore share the same feature set,
-#' `features_final`.
+#' \strong{Why this order.} Drift correction comes before imputation because
+#' QC-based correction ignores missing values, whereas imputed QC values
+#' would bias the fitted trends (Kirwan et al., 2013); imputation therefore
+#' runs once, on corrected data. The QC-RSD leaves imputed values out: it
+#' measures the precision of measured values, and imputed near-minimum values
+#' among the QCs would inflate it. Quality filtering comes \emph{before}
+#' scaling because the RSD of mean-centred data and the variance of
+#' auto-scaled data (always 1) carry no information. Both branches therefore
+#' share the same feature set, `features_final`.
 #'
 #' The workflow follows the QC-based guidelines of Broadhurst et al. (2018)
-#' and the DIMS batch-correction strategy of Kirwan et al. (2013).
+#' and QComics (González-Domínguez et al., 2024) and the DIMS
+#' batch-correction strategy of Kirwan et al. (2013). The outlier-robust
+#' drift correction methods of Vynck et al. (2026) are available through
+#' `drift_method`.
 #'
 #' @note
-#' \strong{Zero Handling:} The pipeline automatically converts all `0` values in
-#' `x` to `NA` prior to analysis.
+#' \strong{Zero Handling:} The pipeline converts all `0` values in `x` to
+#' `NA` before analysis (unless `missing_absent_threshold` marks them as
+#' truly absent).
 #'
 #' \strong{Pre-flight checks:} Method names, and method-specific requirements
 #' (e.g. `norm_factor_col` for `"specific_factor"`, `normalize_ref_sample` for
-#' `"pqn_reference"`), are validated \emph{before} any preprocessing step, so
-#' errors surface early rather than mid-run. Errors raised inside a step are
-#' caught: the function returns an object whose `$error` holds the message.
+#' `"pqn_reference"`, `drift_args` names), are validated \emph{before} any
+#' preprocessing step, so errors surface early rather than mid-run. Errors
+#' raised inside a step are caught: the function returns an object whose
+#' `$error` holds the message.
 #'
 #' @author John Lennon L. Calorio
 #'
@@ -220,6 +247,12 @@
 #' of system suitability and quality control samples in mass spectrometry
 #' assays applied in untargeted clinical metabolomic studies.
 #' *Metabolomics*, 14(6), 72. \doi{10.1007/s11306-018-1367-3}
+#'
+#' González-Domínguez, A., Estanyol-Torres, N., Brunius, C., Landberg, R., &
+#' González-Domínguez, R. (2024). QComics: Recommendations and guidelines for
+#' robust, easily implementable and reportable quality control of
+#' metabolomics data. *Analytical Chemistry*, 96(3), 1064-1072.
+#' \doi{10.1021/acs.analchem.3c03660}
 #'
 #' Kirwan, J.A., Broadhurst, D.I., Davidson, R.L., & Viant, M.R. (2013).
 #' Characterising and correcting batch variation in an automated direct
@@ -232,6 +265,11 @@
 #' improving the biological information content of metabolomics data.
 #' *BMC Genomics*, 7, 142. \doi{10.1186/1471-2164-7-142}
 #'
+#' Vynck, M., Vangeenderhuysen, P., De Paepe, E., Nawrot, T., Plekhova, V., &
+#' Vanhaecke, L. (2026). Robust metabolomics data normalization across scales
+#' and experimental designs. *Analytical Chemistry*, 98(24), 17627-17637.
+#' \doi{10.1021/acs.analchem.5c06841}
+#'
 #' See the individual step functions for method-specific references.
 #'
 #' @family preprocessing steps
@@ -239,24 +277,17 @@
 #'   `run_DIpreprocess` result directly; [dims_data] and [dims_metadata] are
 #'   example inputs.
 #'
-#'
 #' @export
 #'
 #' @examples
 #' data(dims_data)
 #' data(dims_metadata)
 #'
-#' res <- run_DIpreprocess(dims_data, dims_metadata, correct_drift = FALSE,
-#'                         verbose = FALSE)
+#' # Default pipeline, including QC-RSC drift correction
+#' res <- run_DIpreprocess(dims_data, dims_metadata, verbose = FALSE)
 #' res
 #' summary(res)
 #' dim(res$data_nonpls)
-#'
-#' # Full default pipeline, including QCRSC drift correction (slower: loads pmp)
-#' \donttest{
-#' res_drift <- run_DIpreprocess(dims_data, dims_metadata, verbose = FALSE)
-#' res_drift$parameters$correct_drift
-#' }
 #'
 #' # Multi-method mode: steps 1-5 run once, then every combination
 #' multi <- run_DIpreprocess(
@@ -264,11 +295,19 @@
 #'   normalize_method = c("median", "pqn_group"),
 #'   transform_method = "log10",
 #'   scale_nonpls     = c("auto", "pareto"),
-#'   correct_drift    = FALSE,
+#'   drift_method     = "none",
 #'   verbose          = FALSE
 #' )
 #' names(multi)
 #' multi
+#'
+#' # Outlier-robust drift correction (Vynck et al., 2026; needs mgcv)
+#' \donttest{
+#' if (requireNamespace("mgcv", quietly = TRUE)) {
+#'   run_DIpreprocess(dims_data[, 1:20], dims_metadata, drift_method = "tGAM",
+#'                    drift_args = list(sample_weight = 0.2), verbose = FALSE)
+#' }
+#' }
 run_DIpreprocess <- function(
     x,
     metadata,
@@ -282,27 +321,26 @@ run_DIpreprocess <- function(
     norm_factor_col  = NULL,
     subject_id_col   = "SubjectID",
 
-    # - Outlier removal -------------------------------------------------------
+    # - Sample removal --------------------------------------------------------
     outliers         = NULL,
+    blank_types      = NULL,
 
     # - Missing-value filter --------------------------------------------------
-    missing_threshold  = 0.2,
-    missing_by_group   = TRUE,
-    missing_any_group  = TRUE,
-    missing_include_qc = FALSE,
-
-    # - Missing-value imputation ----------------------------------------------
-    impute_method  = 0.2,
-    impute_method_post_drift = NULL,
-    positive_only    = TRUE,
+    missing_threshold        = 0.2,
+    missing_by_group         = TRUE,
+    missing_any_group        = TRUE,
+    missing_include_qc       = FALSE,
+    missing_absent_threshold = NULL,
+    missing_sample_iqr       = 3,
 
     # - Drift / batch correction ----------------------------------------------
-    correct_drift        = TRUE,
-    remove_uncorrected   = FALSE,
-    spline_smooth        = 0,
-    spline_spar_limit    = c(-1.5, 1.5),
-    correct_on_log       = TRUE,
-    min_qc_per_batch     = 5L,
+    drift_method       = "QCRSC",
+    drift_args         = list(),
+    remove_uncorrected = TRUE,
+
+    # - Missing-value imputation ----------------------------------------------
+    impute_method    = 0.2,
+    positive_only    = TRUE,
 
     # - Normalization ---------------------------------------------------------
     normalize_method     = "median",
@@ -312,14 +350,14 @@ run_DIpreprocess <- function(
     # - Transformation --------------------------------------------------------
     transform_method = "log10",
 
-    # - Scaling ---------------------------------------------------------------
-    scale_nonpls     = "auto",
-    scale_pls        = "pareto",
-
     # - Quality filtering -----------------------------------------------------
     rsd_threshold       = 0.3,
     rsd_qc_type         = "QC",
     variance_percentile = 10,
+
+    # - Scaling ---------------------------------------------------------------
+    scale_nonpls     = "auto",
+    scale_pls        = "pareto",
 
     # - Replicate merging -----------------------------------------------------
     merge_replicates = FALSE,
@@ -354,42 +392,41 @@ run_DIpreprocess <- function(
                stringsAsFactors = FALSE)
   }
 
-  # Parameters actually used (evaluated at call time, so e.g. a correct_drift
-  # switched off for missing columns is reported as FALSE).
+  # Parameters actually used (evaluated at call time, so e.g. a drift_method
+  # switched to "none" for missing columns is reported as such).
   .params <- function(norm_m, trans_m, scale_np, scale_p) list(
-    sample_id_col        = sample_id_col,
-    group_col            = group_col,
-    qc_types             = qc_types,
-    batch_col            = batch_col,
-    injection_col        = injection_col,
-    norm_factor_col      = norm_factor_col,
-    subject_id_col       = subject_id_col,
-    outliers             = outliers,
-    missing_threshold    = missing_threshold,
-    missing_by_group     = missing_by_group,
-    missing_any_group    = missing_any_group,
-    missing_include_qc   = missing_include_qc,
-    impute_method        = impute_method,
-    impute_method_post_drift = impute_method_post_drift,
-    positive_only        = positive_only,
-    correct_drift        = correct_drift,
-    remove_uncorrected   = remove_uncorrected,
-    spline_smooth        = spline_smooth,
-    spline_spar_limit    = spline_spar_limit,
-    correct_on_log       = correct_on_log,
-    min_qc_per_batch     = min_qc_per_batch,
-    normalize_method     = norm_m,
-    normalize_ref_sample = normalize_ref_sample,
-    normalize_qc_method  = normalize_qc_method,
-    transform_method     = trans_m,
-    scale_nonpls         = scale_np,
-    scale_pls            = scale_p,
-    rsd_threshold        = rsd_threshold,
-    rsd_qc_type          = rsd_qc_type,
-    variance_percentile  = variance_percentile,
-    merge_replicates     = merge_replicates,
-    track                = track,
-    verbose              = verbose
+    sample_id_col            = sample_id_col,
+    group_col                = group_col,
+    qc_types                 = qc_types,
+    batch_col                = batch_col,
+    injection_col            = injection_col,
+    norm_factor_col          = norm_factor_col,
+    subject_id_col           = subject_id_col,
+    outliers                 = outliers,
+    blank_types              = blank_types,
+    missing_threshold        = missing_threshold,
+    missing_by_group         = missing_by_group,
+    missing_any_group        = missing_any_group,
+    missing_include_qc       = missing_include_qc,
+    missing_absent_threshold = missing_absent_threshold,
+    missing_sample_iqr       = missing_sample_iqr,
+    drift_method             = drift_method,
+    drift_args               = drift_args,
+    remove_uncorrected       = remove_uncorrected,
+    impute_method            = impute_method,
+    positive_only            = positive_only,
+    normalize_method         = norm_m,
+    normalize_ref_sample     = normalize_ref_sample,
+    normalize_qc_method      = normalize_qc_method,
+    transform_method         = trans_m,
+    rsd_threshold            = rsd_threshold,
+    rsd_qc_type              = rsd_qc_type,
+    variance_percentile      = variance_percentile,
+    scale_nonpls             = scale_np,
+    scale_pls                = scale_p,
+    merge_replicates         = merge_replicates,
+    track                    = track,
+    verbose                  = verbose
   )
 
   # ---------------------------------------------------------------------------
@@ -417,8 +454,32 @@ run_DIpreprocess <- function(
   .check_methods(transform_method, .transform_methods, "transform_method")
   .check_methods(scale_nonpls,     .scale_methods,     "scale_nonpls")
   .check_methods(scale_pls,        .scale_methods,     "scale_pls")
+  if (!is.character(drift_method) || length(drift_method) != 1L)
+    stop("'drift_method' must be a single character string.", call. = FALSE)
+  .check_methods(drift_method, c("none", .drift_methods), "drift_method")
   if ("pqn_reference" %in% normalize_method && is.null(normalize_ref_sample))
     stop("normalize_method = 'pqn_reference' requires 'normalize_ref_sample'.", call. = FALSE)
+
+  # drift_args: named run_driftBatchCorrect() arguments not set elsewhere
+  if (!is.list(drift_args) ||
+      (length(drift_args) > 0L && (is.null(names(drift_args)) || any(names(drift_args) == ""))))
+    stop("'drift_args' must be a named list of run_driftBatchCorrect() arguments.",
+         call. = FALSE)
+  reserved <- c("x", "metadata", "method", "injection_col", "batch_col", "group_col",
+                "qc_types", "remove_uncorrected", "verbose")
+  bad_args <- intersect(names(drift_args), reserved)
+  if (length(bad_args) > 0L)
+    stop("Set these through run_DIpreprocess() arguments, not 'drift_args': ",
+         paste(bad_args, collapse = ", "), ".", call. = FALSE)
+  unknown_args <- setdiff(names(drift_args), names(formals(run_driftBatchCorrect)))
+  if (length(unknown_args) > 0L)
+    stop("Unknown 'drift_args' for run_driftBatchCorrect(): ",
+         paste(unknown_args, collapse = ", "), ".", call. = FALSE)
+
+  # RSD filter QC samples: "QC" means all qc_types
+  if (!is.character(rsd_qc_type) || !all(rsd_qc_type %in% c("QC", qc_types)))
+    stop("'rsd_qc_type' must be \"QC\" or labels from 'qc_types'.", call. = FALSE)
+  rsd_qc <- if (identical(rsd_qc_type, "QC")) qc_types else rsd_qc_type
 
   # Method-specific pre-flight checks -----------------------------------------
 
@@ -492,7 +553,7 @@ run_DIpreprocess <- function(
       "Multi-method mode: %d combination(s) detected - %s.",
       nrow(combos), paste(combo_names, collapse = ", ")
     ))
-    msg("Steps 1-5 (through drift correction) will run once; ",
+    msg("Steps 1-5 (through imputation) will run once; ",
         "Steps 6-8 (norm + transform + quality filter) once per unique norm x transform pair; ",
         "Steps 9-10 (scaling + merging) once per full combination.")
   }
@@ -502,16 +563,20 @@ run_DIpreprocess <- function(
   # ===========================================================================
 
   shared <- list(
-    metadata             = NULL,
-    data_raw             = NULL,
+    metadata              = NULL,
+    data_raw              = NULL,
     data_missing_filtered = NULL,
-    data_imputed         = NULL,
-    data_corrected       = NULL,
-    uncorrected_features = character(0L),
-    dimensions           = .empty_dims(),
-    track                = .track_init(),
-    error                = NULL
+    data_corrected        = NULL,
+    data_imputed          = NULL,
+    samples_removed       = character(0L),
+    uncorrected_features  = character(0L),
+    dimensions            = .empty_dims(),
+    track                 = .track_init(),
+    error                 = NULL
   )
+  .add_shared_track <- function(f, step, value)
+    shared$track <<- rbind(shared$track, data.frame(Feature = f, Step = step, Value = value,
+                                                    stringsAsFactors = FALSE))
 
   tryCatch({
 
@@ -533,9 +598,7 @@ run_DIpreprocess <- function(
     for (col_name in c(injection_col, norm_factor_col)) {
       if (col_name %in% colnames(metadata)) {
         if (!is.numeric(metadata[[col_name]]))
-          stop(sprintf(
-            "Metadata column '%s' must be numeric.", col_name
-          ))
+          stop(sprintf("Metadata column '%s' must be numeric.", col_name))
       }
     }
 
@@ -566,7 +629,7 @@ run_DIpreprocess <- function(
       rownames(metadata) <- rownames(x)
     }
 
-    is_numeric_col <- vapply(df, function(col) is.numeric(col) || is.integer(col), logical(1L))
+    is_numeric_col <- vapply(df, is.numeric, logical(1L))
     if (!all(is_numeric_col)) {
       bad_cols <- names(df)[!is_numeric_col]
       stop(sprintf(
@@ -578,10 +641,10 @@ run_DIpreprocess <- function(
     shared$dimensions <- .record_dim(shared$dimensions, "Original", df)
 
     # =========================================================================
-    # 2. OUTLIER REMOVAL
+    # 2. SAMPLE REMOVAL: OUTLIERS, THEN BLANKS
     # =========================================================================
 
-    msg("Step 2/10: Checking for outliers...")
+    msg("Step 2/10: Removing outliers and blanks...")
 
     if (!is.null(outliers) && length(outliers) > 0L) {
       present   <- intersect(outliers, rownames(df))
@@ -600,8 +663,30 @@ run_DIpreprocess <- function(
       shared$dimensions <- .record_dim(shared$dimensions, "After outlier removal", df)
     }
 
+    if (!is.null(blank_types)) {
+      if (!any(metadata[[group_col]] %in% blank_types)) {
+        warning("No blank samples (", paste(blank_types, collapse = ", "),
+                ") found; skipping the blank filter.", call. = FALSE)
+      } else {
+        bf <- run_filterblank(df, metadata, group_col = group_col,
+                              blank_types = blank_types, qc_types = qc_types,
+                              verbose = FALSE)
+        for (f in intersect(track, bf$features_removed)) {
+          r <- bf$blank_summary[bf$blank_summary$Feature == f, ]
+          .add_shared_track(f, "Blank filter",
+                            sprintf("sample/blank = %.2f, blank RSD = %.0f%%",
+                                    r$Ratio, r$Blank_RSD * 100))
+        }
+        df       <- bf$data
+        metadata <- bf$metadata
+        msg(sprintf("  Blank filter: %d potential contaminant(s) flagged, %d removed; %d blank sample(s) dropped.",
+                    length(bf$features_flagged), length(bf$features_removed), bf$n_blanks))
+        shared$dimensions <- .record_dim(shared$dimensions, "After blank filter", df)
+      }
+    }
+
     # =========================================================================
-    # METADATA SNAPSHOT (after outlier removal)
+    # METADATA SNAPSHOT (after sample removal)
     # =========================================================================
 
     .meta_col <- function(col) {
@@ -629,26 +714,22 @@ run_DIpreprocess <- function(
     shared$metadata <- meta_snap
 
     # =========================================================================
-    # ZEROS -> NA
+    # 3. ZEROS -> NA AND MISSING-VALUE FILTERING
     # =========================================================================
 
-    n_zeros <- sum(df == 0L, na.rm = TRUE)
+    msg(sprintf("Step 3/10: Missing values (zeros as NA; threshold = %.0f%%)...",
+                missing_threshold * 100))
+
+    n_zeros <- sum(df == 0, na.rm = TRUE)
     if (n_zeros > 0L) {
-      df[df == 0L] <- NA
+      df[df == 0] <- NA
       msg(sprintf("  Converted %d zero(s) to NA (structural missingness).", n_zeros))
     }
 
     all_na <- colSums(is.na(df)) == nrow(df)
     if (any(all_na)) {
-      if (!is.null(track)) {
-        lost_na <- intersect(track, names(all_na)[all_na])
-        for (f in lost_na) {
-          shared$track <- rbind(shared$track, data.frame(
-            Feature = f, Step = "All-NA removal", Value = "100% missing",
-            stringsAsFactors = FALSE
-          ))
-        }
-      }
+      for (f in intersect(track, names(all_na)[all_na]))
+        .add_shared_track(f, "All-NA removal", "100% missing")
       df <- df[, !all_na, drop = FALSE]
       msg(sprintf("  Removed %d all-NA feature(s). %d remaining.",
                   sum(all_na), ncol(df)))
@@ -657,61 +738,108 @@ run_DIpreprocess <- function(
     shared$data_raw   <- df
     shared$dimensions <- .record_dim(shared$dimensions, "After zero -> NA conversion", df)
 
-    # =========================================================================
-    # 3. MISSING-VALUE FILTERING
-    # =========================================================================
-
-    msg(sprintf("Step 3/10: Missing-value filtering (threshold = %.0f%%)...",
-                missing_threshold * 100))
-
     df_before_miss <- df
     filt_miss <- run_filtermissing(
-      x               = df,
-      metadata        = metadata,
-      threshold       = missing_threshold,
-      filter_by_group = missing_by_group,
-      any_group       = missing_any_group,
-      include_QC      = missing_include_qc,
-      group_col       = group_col,
-      qc_types        = qc_types,
-      zero_as_missing = FALSE,
-      verbose         = FALSE
+      x                = df,
+      metadata         = metadata,
+      threshold        = missing_threshold,
+      filter_by_group  = missing_by_group,
+      any_group        = missing_any_group,
+      include_QC       = missing_include_qc,
+      group_col        = group_col,
+      qc_types         = qc_types,
+      zero_as_missing  = FALSE,
+      absent_threshold = missing_absent_threshold,
+      sample_iqr       = missing_sample_iqr,
+      verbose          = FALSE
     )
+    df <- filt_miss$data
 
-    df                        <- filt_miss$data
+    if (length(filt_miss$samples_removed) > 0L) {
+      # keep metadata and earlier data aligned with the remaining samples
+      kept_rows <- !rownames(metadata) %in% filt_miss$samples_removed
+      metadata        <- metadata[kept_rows, , drop = FALSE]
+      shared$metadata <- shared$metadata[kept_rows, , drop = FALSE]
+      shared$data_raw <- shared$data_raw[kept_rows, , drop = FALSE]
+      shared$samples_removed <- filt_miss$samples_removed
+      msg(sprintf("  Removed %d sample(s) with abnormally high missingness: %s",
+                  length(filt_miss$samples_removed),
+                  paste(filt_miss$samples_removed, collapse = ", ")))
+    }
 
-    if (!is.null(track)) {
-      lost_miss <- setdiff(intersect(track, colnames(df_before_miss)), colnames(df))
-      for (f in lost_miss) {
-        vals <- df_before_miss[[f]]
-        gps  <- as.character(metadata[[group_col]])
-        unique_gps <- sort(unique(gps))
-        miss_info <- vapply(unique_gps, function(g) {
-          sub <- vals[gps == g]
-          sprintf("%s=%.0f%%", g, (sum(is.na(sub)) / length(sub)) * 100)
-        }, character(1L))
-
-        shared$track <- rbind(shared$track, data.frame(
-          Feature = f, Step = "Missing value", 
-          Value = paste(miss_info, collapse = ", "),
-          stringsAsFactors = FALSE
-        ))
-      }
+    for (f in intersect(track, filt_miss$features_removed)) {
+      vals <- df_before_miss[[f]]
+      gps  <- as.character(metadata[[group_col]])
+      miss_info <- vapply(sort(unique(gps)), function(g) {
+        sub <- vals[gps == g]
+        sprintf("%s=%.0f%%", g, mean(is.na(sub)) * 100)
+      }, character(1L))
+      .add_shared_track(f, "Missing value", paste(miss_info, collapse = ", "))
     }
 
     shared$data_missing_filtered <- df
-    shared$dimensions         <- .record_dim(shared$dimensions, "After missing filter", df)
+    shared$dimensions <- .record_dim(shared$dimensions, "After missing filter", df)
 
     msg(sprintf("  Removed %d feature(s) (%.1f%%). %d remaining.",
                 filt_miss$n_features_removed,
                 filt_miss$n_features_removed / filt_miss$n_features_before * 100,
                 ncol(df)))
+    if (length(filt_miss$features_absent) > 0L)
+      msg(sprintf("  Kept %d truly absent feature(s) with %d zero(s).",
+                  length(filt_miss$features_absent), filt_miss$n_absent_zeros))
 
     # =========================================================================
-    # 4. MISSING-VALUE IMPUTATION
+    # 4. SIGNAL DRIFT AND BATCH CORRECTION (before imputation)
     # =========================================================================
 
-    msg(sprintf("Step 4/10: Imputing missing values (method = %s)...",
+    msg(sprintf("Step 4/10: Drift/batch correction (%s)...", drift_method))
+
+    if (drift_method != "none") {
+      required_meta <- c(batch_col, group_col, if (drift_method != "ComBat") injection_col)
+      missing_meta  <- setdiff(required_meta, colnames(metadata))
+      if (length(missing_meta) > 0L) {
+        warning("Skipping drift correction: metadata column(s) not found: ",
+                paste(missing_meta, collapse = ", "), call. = FALSE)
+        drift_method <- "none"
+      }
+    }
+
+    if (drift_method != "none") {
+      corr <- do.call(run_driftBatchCorrect, c(list(
+        x                  = df,
+        metadata           = metadata,
+        method             = drift_method,
+        injection_col      = injection_col,
+        batch_col          = batch_col,
+        group_col          = group_col,
+        qc_types           = qc_types,
+        remove_uncorrected = remove_uncorrected,
+        verbose            = FALSE
+      ), drift_args))
+
+      shared$uncorrected_features <- corr$uncorrected_features
+      if (remove_uncorrected) {
+        for (f in intersect(track, corr$uncorrected_features))
+          .add_shared_track(f, "Drift correction", sprintf(
+            "Uncorrected in batch(es) %s",
+            paste(corr$uncorrected$Batch[corr$uncorrected$Feature == f], collapse = ", ")))
+      }
+      df <- corr$data
+      msg(sprintf("  %s applied. %d feature(s) not correctable in every batch (%s). %d remaining.",
+                  drift_method, corr$n_uncorrected,
+                  if (remove_uncorrected) "removed" else "kept uncorrected", ncol(df)))
+    } else {
+      msg("  Skipped (drift_method = 'none').")
+    }
+
+    shared$data_corrected <- df
+    shared$dimensions     <- .record_dim(shared$dimensions, "After drift correction", df)
+
+    # =========================================================================
+    # 5. MISSING-VALUE IMPUTATION (once, on corrected data)
+    # =========================================================================
+
+    msg(sprintf("Step 5/10: Imputing missing values (method = %s)...",
                 as.character(impute_method)))
 
     imp <- run_mvimpute(
@@ -720,105 +848,13 @@ run_DIpreprocess <- function(
       positive_only = positive_only,
       verbose       = FALSE
     )
-    df                   <- imp$data
-    shared$data_imputed  <- df
+    df <- imp$data
+    shared$data_imputed <- df
     msg(sprintf("  Imputed %d missing value(s).", imp$n_missing_before - imp$n_missing_after))
 
-    # =========================================================================
-    # 5. SIGNAL DRIFT AND BATCH CORRECTION
-    # =========================================================================
-
-    msg("Step 5/10: Drift/batch correction...")
-
-    uncorrected_features <- character(0L)
-
-    if (correct_drift) {
-      required_meta <- c(batch_col, injection_col, group_col)
-      missing_meta  <- setdiff(required_meta, colnames(metadata))
-      if (length(missing_meta) > 0L) {
-        warning("Skipping drift correction: metadata column(s) not found: ",
-                paste(missing_meta, collapse = ", "), call. = FALSE)
-        correct_drift <- FALSE
-      }
-    }
-
-    if (correct_drift) {
-      corr_result <- run_driftBatchCorrect(
-        x                   = df,
-        metadata            = metadata,
-        perform_correction  = TRUE,
-        batch_corr_only     = FALSE,
-        injection_col       = injection_col,
-        batch_col           = batch_col,
-        group_col           = group_col,
-        qc_label            = "QC",
-        qc_types            = qc_types,
-        spline_smooth_param = spline_smooth,
-        min_QC              = min_qc_per_batch,
-        spar_limit          = spline_spar_limit,
-        log_scale           = correct_on_log,
-        verbose             = FALSE
-      )
-
-      uncorrected_features <- corr_result$uncorrected_features
-
-      if (remove_uncorrected && length(uncorrected_features) > 0L) {
-        if (!is.null(track)) {
-          lost_drift <- intersect(track, uncorrected_features)
-          for (f in lost_drift) {
-            shared$track <- rbind(shared$track, data.frame(
-              Feature = f, Step = "Drift correction", Value = "Uncorrected",
-              stringsAsFactors = FALSE
-            ))
-          }
-        }
-        corr_df <- corr_result$data
-        keep    <- setdiff(colnames(corr_df), uncorrected_features)
-        df      <- corr_df[, keep, drop = FALSE]
-        msg(sprintf("  Removed %d uncorrected feature(s). %d remaining.",
-                    length(uncorrected_features), ncol(df)))
-      } else {
-        df <- corr_result$data
-        if (length(uncorrected_features) > 0L)
-          msg(sprintf("  %d feature(s) could not be corrected (retained).",
-                      length(uncorrected_features)))
-      }
-
-      na_before_corr <- sum(is.na(as.matrix(shared$data_imputed)))
-      na_after_corr  <- sum(is.na(as.matrix(df)))
-      new_na         <- na_after_corr - na_before_corr
-
-      if (na_after_corr > 0L) {
-        # Fall back to first method if second is not explicitly set
-        post_method <- if (is.null(impute_method_post_drift)) impute_method else impute_method_post_drift
-
-        if (is.character(post_method) && tolower(trimws(post_method)) == "none") {
-          msg(sprintf(
-            "  %d NA(s) present after QCRSC (%d newly introduced), but post-drift imputation is set to 'none'. Skipping.",
-            na_after_corr, max(0L, new_na)
-          ))
-        } else {
-          imp_r <- run_mvimpute(x = df, method = post_method, positive_only = positive_only, verbose = FALSE)
-          df    <- imp_r$data
-          msg(sprintf(
-            "  Re-imputed %d NA(s) after QCRSC (%d newly introduced, %d pre-existing) using method: %s.",
-            na_after_corr, max(0L, new_na), na_after_corr - max(0L, new_na), as.character(post_method)
-          ))
-        }
-      }
-
-      msg(sprintf("  QCRSC applied (%s).", corr_result$method_used))
-    } else {
-      msg("  Skipped (correct_drift = FALSE).")
-    }
-
-    shared$data_corrected       <- df
-    shared$uncorrected_features <- uncorrected_features
-    shared$dimensions           <- .record_dim(shared$dimensions, "After drift correction", df)
-
   }, error = function(e) {
-    message("run_DIpreprocess ERROR (Steps 1-5): ", e$message)
-    shared$error <<- e$message
+    message("run_DIpreprocess ERROR (Steps 1-5): ", conditionMessage(e))
+    shared$error <<- conditionMessage(e)
   })
 
   # If early steps failed, return a minimal error object
@@ -864,7 +900,7 @@ run_DIpreprocess <- function(
       # 6. NORMALIZATION
       msg(sprintf("  [%s] Step 6: Normalizing (%s)...", nt_label, norm_m))
       df_norm <- run_normalize(
-        x             = shared$data_corrected,
+        x             = shared$data_imputed,
         metadata      = metadata,
         method        = norm_m,
         factor_col    = norm_factor_col,
@@ -893,16 +929,19 @@ run_DIpreprocess <- function(
         nt_label, rsd_threshold * 100, variance_percentile
       ))
 
+      # RSD measures the precision of measured QC values, so imputed values
+      # (still NA in data_corrected) are left out
+      df_obs <- df_norm
+      df_obs[is.na(shared$data_corrected)] <- NA
       rsd_res <- run_filterRSD(
-        x         = df_norm,
+        x         = df_obs,
         metadata  = metadata,
         max_rsd   = rsd_threshold,
         group_col = "Group",      # raw labels, so rsd_qc_type can pick EQC/SQC
-        qc_type   = rsd_qc_type,
-        qc_types  = qc_types,
+        qc_types  = rsd_qc,
         verbose   = FALSE
       )
-      for (f in setdiff(intersect(track, colnames(df_norm)), rsd_res$features_kept)) {
+      for (f in intersect(track, rsd_res$features_removed)) {
         r <- rsd_res$rsd_values[[f]]
         .add_track(f, "RSD filter", if (is.na(r)) "NA" else sprintf("%.1f%%", r * 100))
       }
@@ -919,7 +958,7 @@ run_DIpreprocess <- function(
         percentile = variance_percentile,
         verbose    = FALSE
       )
-      for (f in setdiff(intersect(track, rsd_res$features_kept), var_res$features_kept))
+      for (f in intersect(track, var_res$features_removed))
         .add_track(f, "Variance filter", sprintf("Var=%.2e", var_res$variance_values[[f]]))
       dims_add <- .record_dim(dims_add, sprintf("[%s] After variance filter", nt_label),
                               var_res$data)
@@ -956,9 +995,10 @@ run_DIpreprocess <- function(
       metadata              = shared$metadata,
       data_raw              = shared$data_raw,
       data_missing_filtered = shared$data_missing_filtered,
-      data_imputed          = shared$data_imputed,
       data_corrected        = shared$data_corrected,
+      data_imputed          = shared$data_imputed,
       data_normalized       = nt$df_norm,
+      samples_removed       = shared$samples_removed,
       data_transformed      = nt$df_trans,
       data_nonpls           = NULL,
       data_pls              = NULL,
@@ -1074,7 +1114,6 @@ run_DIpreprocess <- function(
 
   if (!is_multi) {
 
-    # Single combination - original return shape
     msg("Steps 6-10: Normalization -> Transformation -> Filtering -> Scaling -> Merge...")
 
     nt  <- .run_norm_trans(normalize_method, transform_method)
@@ -1090,8 +1129,8 @@ run_DIpreprocess <- function(
   } else {
 
     # Multiple combinations - named list of run_DIpreprocess objects.
-    # Norm+transform is cached per unique (norm, trans) pair; scale/filter/merge
-    # runs once per full (norm, trans, scale_np, scale_p) combination.
+    # Norm+transform+filter is cached per unique (norm, trans) pair;
+    # scale/merge runs once per full (norm, trans, scale_np, scale_p) combination.
 
     nt_grid <- unique(combos[, c("norm", "trans"), drop = FALSE])
     nt_keys <- paste(nt_grid$norm, nt_grid$trans, sep = "_")
@@ -1101,7 +1140,6 @@ run_DIpreprocess <- function(
       nrow(nt_grid), nrow(combos)
     ))
 
-    # Cache norm+transform to avoid re-running for each scale variant
     nt_cache        <- vector("list", nrow(nt_grid))
     names(nt_cache) <- nt_keys
 
@@ -1151,8 +1189,6 @@ run_DIpreprocess <- function(
 # S3 METHODS - run_DIpreprocess
 # ==============================================================================
 
-#' @param object A `run_DIpreprocess` or `run_DIpreprocess_multi` object.
-#' @param ... Ignored.
 #' @rdname run_DIpreprocess
 #' @export
 print.run_DIpreprocess <- function(x, ...) {
@@ -1165,12 +1201,18 @@ print.run_DIpreprocess <- function(x, ...) {
   n_samp <- if (!is.null(x$data_nonpls)) nrow(x$data_nonpls) else NA_integer_
   n_feat <- length(x$features_final)
   cat(sprintf("Data   : %d samples x %d features (final)\n", n_samp, n_feat))
+  if (length(x$samples_removed) > 0L)
+    cat(sprintf("Samples: %d removed for abnormally high missingness\n",
+                length(x$samples_removed)))
   if (!is.null(x$data_nonpls_merged))
     cat(sprintf("Merged : %d samples x %d features (replicate-merged)\n",
                 nrow(x$data_nonpls_merged), ncol(x$data_nonpls_merged)))
-  if (length(x$uncorrected_features) > 0L)
-    cat(sprintf("QCRSC  : %d uncorrected feature(s) retained\n",
-                length(x$uncorrected_features)))
+  if (!is.null(x$parameters$drift_method))
+    cat(sprintf("Drift  : %s", x$parameters$drift_method),
+        if (length(x$uncorrected_features) > 0L)
+          sprintf("(%d uncorrected feature(s) %s)", length(x$uncorrected_features),
+                  if (isTRUE(x$parameters$remove_uncorrected)) "removed" else "kept"),
+        "\n")
   if (!is.null(x$track) && nrow(x$track) > 0L)
     cat(sprintf("Track  : %d features tracked in removal summary\n", nrow(x$track)))
   cat(sprintf("Time   : %.1f second(s)\n", x$elapsed_seconds))
@@ -1209,13 +1251,12 @@ summary.run_DIpreprocess <- function(object, ...) {
 print.run_DIpreprocess_multi <- function(x, ...) {
   cat("=== run_DIpreprocess_multi pipeline result ===\n")
 
-  if (!is.null(x$error)) {
-    cat(sprintf("STATUS : FAILED - %s\n", x$error))
+  if (!is.null(x[["error"]])) {
+    cat(sprintf("STATUS : FAILED - %s\n", x[["error"]]))
     return(invisible(x))
   }
 
   elapsed <- attr(x, "elapsed_seconds")
-  combos  <- attr(x, "combos")
 
   cat(sprintf("Combinations : %d\n", length(x)))
   cat(sprintf("Names        : %s\n", paste(names(x), collapse = ", ")))

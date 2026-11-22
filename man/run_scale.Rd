@@ -16,43 +16,44 @@ run_scale(
 \method{print}{run_scale}(x, ...)
 }
 \arguments{
-\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
+\item{x}{Matrix or data frame. Numeric data with samples in rows and
+features in columns.
 For \code{print()}, a \code{run_scale} object.}
 
 \item{method}{Character. Scaling method:
 \itemize{
-\item \code{"mean"}: Mean-centering only
-\item \code{"auto"}: Auto-scaling (mean-centering + unit variance)
-\item \code{"pareto"}: Pareto-scaling (mean-centering + sqrt(SD))
-\item \code{"ln"}: Natural log transformation
-\item \code{"vast"}: VAST scaling (auto-scaling weighted by CV)
-\item \code{"svast"}: Supervised VAST (weighted by mean class CV)
-\item \code{"xvast"}: Extended supervised VAST (weighted by max class CV)
-\item \code{"none"}: No scaling
+\item \code{"mean"}: mean-centering only
+\item \code{"auto"}: auto-scaling (mean-centering + unit variance)
+\item \code{"pareto"}: Pareto scaling (mean-centering, divide by sqrt(SD))
+\item \code{"vast"}: VAST, auto-scaling weighted by feature stability
+\item \code{"svast"}: supervised VAST, weighted by the mean within-group
+stability
+\item \code{"xvast"}: x-VAST, weighted by the maximum within-group stability
+\item \code{"none"}: no scaling
 }}
 
 \item{metadata}{Data frame. Required for \code{"svast"} and \code{"xvast"}.
-Default: NULL.}
+Default: \code{NULL}.}
 
-\item{group_col}{Character. Column in \code{metadata} with group labels.
-Required for supervised methods. Default: "Group".}
+\item{group_col}{Character. Column in \code{metadata} with group labels, used by
+the supervised methods. Default: \code{"Group"}.}
 
-\item{verbose}{Logical. Print progress. Default: TRUE.}
+\item{verbose}{Logical. Print progress messages. Default: \code{TRUE}.}
 
 \item{...}{Ignored.}
 }
 \value{
 A list of class \code{"run_scale"} containing:
-\item{data}{Scaled data (same class as input \code{x})}
-\item{scaling_factors}{Numeric vector of per-feature scaling factors}
-\item{center_values}{Numeric vector of per-feature means}
-\item{method_used}{Character}
-\item{parameters}{List of parameters}
+\item{data}{Scaled data (same class as \code{x}).}
+\item{scaling_factors}{Numeric vector of per-feature divisors.}
+\item{center_values}{Numeric vector of per-feature means.}
+\item{method_used}{Character.}
+\item{parameters}{List with \code{method}, \code{group_col}, and the group levels
+used by supervised methods (\code{groups}, otherwise \code{NULL}).}
 }
 \description{
-Applies various scaling methods to standardize features and prepare data
-for multivariate analysis. Includes classical scaling methods as well as
-variance-stability (VAST) scaling variants.
+Centres and scales features to prepare data for multivariate analysis,
+with classical scaling methods and the variable stability (VAST) family.
 }
 \details{
 With \eqn{\bar{x}_j} and \eqn{s_j} the mean and standard deviation of
@@ -63,15 +64,20 @@ feature \eqn{j} (van den Berg et al., 2006):
 equal weight; recommended for PCA, clustering, t-tests, and ANOVA.
 \item \strong{pareto}: \eqn{(x - \bar{x}_j) / \sqrt{s_j}}. Shrinks large fold changes
 less than auto-scaling; recommended for PLS-DA and OPLS-DA.
-\item \strong{vast} (variable stability; Keun et al., 2003): auto-scaled data
-multiplied by \eqn{\bar{x}_j / s_j}, i.e. divided by the coefficient of
-variation, which down-weights unstable features.
-\item \strong{svast} / \strong{xvast}: supervised VAST variants (Yang et al., 2015) that
-use the mean (svast) or maximum (xvast) of the within-group
-\eqn{\bar{x} / s} ratios, so they require \code{metadata} and \code{group_col}.
-\item \strong{ln}: natural log of the data (a transformation, kept for backward
-compatibility; prefer \code{\link[=run_transform]{run_transform()}}).
+\item \strong{vast} (Keun et al., 2003): auto-scaled data multiplied by the
+stability \eqn{\bar{x}_j / s_j} (the inverse coefficient of variation),
+which down-weights unstable features.
+\item \strong{svast} (supervised VAST; Keun et al., 2003): as VAST, with the
+stability averaged over the within-group values
+\eqn{\bar{x}_{gj} / s_{gj}}.
+\item \strong{xvast} (x-VAST; Yang et al., 2015): as VAST, with the maximum
+within-group stability, so a feature stable in one group keeps a large
+weight even when it differs strongly between groups.
 }
+
+The VAST weights need positive feature means, i.e. data on a ratio scale.
+Log-transformed values close to or below zero give meaningless weights, so
+a warning is issued if any mean used for a weight is <= 0.
 
 Zero-variance features get a scaling factor of 1 to avoid division by zero.
 }
@@ -111,6 +117,7 @@ Other preprocessing steps:
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
 \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
 \code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filterblank]{run_filterblank()}},
 \code{\link[=run_filtermissing]{run_filtermissing()}},
 \code{\link[=run_filtervariance]{run_filtervariance()}},
 \code{\link[=run_mvimpute]{run_mvimpute()}},

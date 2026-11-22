@@ -9,7 +9,7 @@ plot_dist_beforeafter(
   y,
   group_by = "sample",
   plot_what = NULL,
-  n_random = 30L,
+  n_random = 20L,
   x_label = "Before",
   y_label = "After",
   plot_title = NULL,
@@ -17,129 +17,108 @@ plot_dist_beforeafter(
   y_fill = "#E69F00",
   point_alpha = 0.6,
   theme = "nature",
-  base_size = 15,
+  base_size = 11,
   font_family = "sans",
   plot_cols = NULL,
   seed = 123,
-  global_font_size = NULL,
-  title_size = NULL,
-  subtitle_size = NULL,
-  xlab_size = NULL,
-  ylab_size = NULL
+  title_size = base_size,
+  subtitle_size = base_size * 1.2,
+  xlab_size = base_size,
+  ylab_size = base_size
 )
 }
 \arguments{
-\item{x}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing
-the data \emph{before} transformation. Rows are samples; columns are
-features. Column names may contain special characters. Alternatively, a
+\item{x}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing the data
+\emph{before} transformation. Rows are samples; columns are features.
+Column names may contain special characters. Alternatively, a
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}} result: \code{x} then becomes its imputed data
-(\code{$data_imputed}) and \code{y} its final NONPLS data
-(\code{$data_nonpls}), so \code{y} can be omitted.}
+(\verb{$data_imputed}) and \code{y} its final NONPLS data (\verb{$data_nonpls}), so \code{y}
+can be omitted.}
 
-\item{y}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing
-the data \emph{after} transformation. Must have the same dimensions and
-column names as \code{x}. Ignored when \code{x} is a
-\code{run_DIpreprocess} result.}
+\item{y}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing the data
+\emph{after} transformation. Must have the same dimensions and column
+names as \code{x}. Ignored when \code{x} is a \code{run_DIpreprocess} result.}
 
-\item{group_by}{Character. Perspective for box plots. \code{"sample"}
-shows one box per sample; \code{"feature"} shows one box per feature.
-Default is \code{"sample"}.}
+\item{group_by}{Character. Perspective for box plots: \code{"sample"} (default)
+draws one box per sample, \code{"feature"} one box per feature.}
 
-\item{plot_what}{Character vector or \code{NULL}. Subset of column names
-(features) from \code{x} and \code{y} to include in the plots. If
-\code{NULL}, all features are used. Default is \code{NULL}.}
+\item{plot_what}{Character vector or \code{NULL}. Subset of features to include
+in all plots. \code{NULL} (default) uses all features.}
 
-\item{n_random}{Integer or \code{NULL}. Maximum number of samples (when
-\code{group_by = "sample"}) or features (when \code{group_by =
-"feature"}) to display in box plots. If \code{NULL} or if the data has
-fewer items than \code{n_random}, all are shown. Default is \code{30}.}
+\item{n_random}{Integer or \code{NULL}. Maximum number of samples (or features,
+for \code{group_by = "feature"}) shown in the box plots, drawn at random.
+\code{NULL} shows all. Default: \code{20}.}
 
-\item{x_label}{Character. Label describing the before state, used in plot
-titles. Default is \code{"Before"}.}
+\item{x_label}{Character. Label of the before state. Default: \code{"Before"}.}
 
-\item{y_label}{Character. Label describing the after state, used in plot
-titles. Default is \code{"After"}.}
+\item{y_label}{Character. Label of the after state. Default: \code{"After"}.}
 
-\item{plot_title}{Character or \code{NULL}. Main title for the combined plot.
-If \code{NULL} (default), a title is automatically generated.}
+\item{plot_title}{Character or \code{NULL}. Main title of the combined plot.
+\code{NULL} (default) generates one.}
 
-\item{x_fill}{Character. Fill color for before density and box plots.
-Default is \code{"#56B4E9"} (Okabe-Ito sky blue).}
+\item{x_fill}{Character. Fill colour of the before plots. Default:
+\code{"#56B4E9"} (Okabe-Ito sky blue).}
 
-\item{y_fill}{Character. Fill color for after density and box plots.
-Default is \code{"#E69F00"} (Okabe-Ito orange).}
+\item{y_fill}{Character. Fill colour of the after plots. Default:
+\code{"#E69F00"} (Okabe-Ito orange).}
 
-\item{point_alpha}{Numeric in \code{[0, 1]}. Transparency for density fill
-and box fill. Default is \code{0.6}.}
+\item{point_alpha}{Numeric in (0, 1]. Transparency of the density and box
+fills. Default: \code{0.6}.}
 
-\item{theme}{Character. ggplot2 theme to apply. Options: \code{"nature"},
-\code{"minimal"}, \code{"classic"}, \code{"bw"}, \code{"light"},
-\code{"dark"}. Default is \code{"nature"}.}
+\item{theme}{Character. ggplot2 theme: \code{"nature"} (default), \code{"minimal"},
+\code{"classic"}, \code{"bw"}, \code{"light"}, or \code{"dark"}.}
 
-\item{base_size}{Numeric. Base font size for the theme (pts). Default is
-\code{15}.}
+\item{base_size}{Numeric. Base font size in points. All text sizes follow
+it unless set explicitly below. Default: \code{11}, ggplot2's default, which
+suits the default 7 x 5 inch figures of R Markdown and Quarto.}
 
-\item{font_family}{Character. Font family for all text elements. Default
-is \code{"sans"}.}
+\item{font_family}{Character. Font family for all text. Default: \code{"sans"}.}
 
-\item{plot_cols}{Integer or \code{NULL}. Number of columns in the combined
-output grid. If \code{NULL}, defaults to \code{2} (density row +
-boxplot row). Default is \code{NULL}.}
+\item{plot_cols}{Integer or \code{NULL}. Number of columns of the combined plot.
+\code{NULL} (default) uses 2 (densities on top, box plots below).}
 
-\item{seed}{Numeric or \code{NULL}. Random seed for reproducible sampling
-when \code{n_random} is used. Default is \code{123}.}
+\item{seed}{Numeric or \code{NULL}. Seed for the random selection of
+\code{n_random}; the global random number state is restored afterwards.
+Default: \code{123}.}
 
-\item{global_font_size}{Numeric or \code{NULL}. Base font size for
-proportional scaling of all text elements. Default is \code{NULL}.}
+\item{title_size}{Numeric. Font size of the panel titles.
+Default: \code{base_size}.}
 
-\item{title_size}{Numeric or \code{NULL}. Plot panel title font size.
-Default is \code{NULL}.}
+\item{subtitle_size}{Numeric. Font size of the main title above all
+panels. Default: \code{base_size * 1.2}.}
 
-\item{subtitle_size}{Numeric or \code{NULL}. Combined plot main title font
-size. Default is \code{NULL}.}
-
-\item{xlab_size}{Numeric or \code{NULL}. X-axis label font size. Default
-is \code{NULL}.}
-
-\item{ylab_size}{Numeric or \code{NULL}. Y-axis label font size. Default
-is \code{NULL}.}
+\item{xlab_size, ylab_size}{Numeric. Font sizes of the x- and y-axis titles.
+Default: \code{base_size}.}
 }
 \value{
-A named list containing:
+A list of class \code{"dimsprepr_dist_plot"} containing:
 \describe{
 \item{\code{plot_density_before}}{Density plot of \code{x}.}
 \item{\code{plot_density_after}}{Density plot of \code{y}.}
 \item{\code{plot_box_before}}{Box plot of \code{x}.}
 \item{\code{plot_box_after}}{Box plot of \code{y}.}
-\item{\code{plot_combined}}{A \code{gtable} grob of all four panels,
-drawn to the active device.}
+\item{\code{plot_combined}}{A \code{gtable} of all four panels.}
 }
+Printing the list draws the combined plot.
 }
 \description{
 Generates density and box plots comparing data distributions before and
 after any transformation, normalization, scaling, or correction step.
-Plots can be oriented by sample or by feature. Returns a named list of
-individual \code{ggplot2} objects and a combined \code{gtable} grob.
+Box plots can be drawn per sample or per feature. Returns the individual
+\code{ggplot2} objects and the combined plot.
 }
 \details{
-\code{x} and \code{y} must share identical row counts, column counts, and
-column names. Row order is assumed to correspond between \code{x} and
-\code{y}.
+\code{x} and \code{y} must share identical row counts, column counts, and column
+names, with corresponding row order. Missing values are left out.
 
-When \code{plot_what} is specified, only those features are included in
-both density and box plots. When \code{n_random} is also specified, random
-sub-sampling is applied on top of the \code{plot_what} subset for box
-plots only; density plots always use the full \code{plot_what} subset.
+When \code{plot_what} is given, only those features are used. \code{n_random}
+subsamples the box plots only; the density plots always use all selected
+data. Box plot items are ordered by their median in \code{x}.
 
-Box plot items are ordered by median value for readability.
-
-Font sizes follow the same resolution priority as \code{\link[=plot_beforeafter]{plot_beforeafter()}}:
-explicit argument > \code{global_font_size} scaling > \code{base_size}
-derived default.
-
-The function renders the combined plot to the active graphics device and
-also returns a named list so individual panels can be extracted,
-re-styled, or exported independently.
+Like a ggplot, the combined plot is drawn when the result is printed,
+which happens automatically when the call is not assigned, so it appears
+directly in the console and in R Markdown and Quarto documents. Inside
+loops or functions, call \code{print()} on it.
 }
 \examples{
 data(dims_data)

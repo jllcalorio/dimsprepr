@@ -59,6 +59,7 @@ test_that("run_transform reports shift and fallback in method_used", {
 })
 
 test_that("glog requires metadata and runs on the bundled data", {
+  skip_if_not_installed("pmp")
   x <- dims_clean(1:10)
   expect_error(run_transform(x, "glog", verbose = FALSE), "metadata")
   res <- run_transform(x, "glog", metadata = dims_metadata, verbose = FALSE)
@@ -71,4 +72,9 @@ test_that("vsn transformation runs when vsn is installed", {
   res <- run_transform(x, "vsn", verbose = FALSE)
   expect_equal(dim(res$data), dim(x))
   expect_false(anyNA(res$data))
+})
+
+test_that("ln is the natural log", {
+  x <- matrix(c(1, exp(1), exp(2), exp(3)), 2, dimnames = list(NULL, c("a", "b")))
+  expect_equal(run_transform(x, "ln", verbose = FALSE)$data, log(x))
 })

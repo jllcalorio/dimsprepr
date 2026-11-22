@@ -19,28 +19,27 @@ run_DIpreprocess(
   norm_factor_col = NULL,
   subject_id_col = "SubjectID",
   outliers = NULL,
+  blank_types = NULL,
   missing_threshold = 0.2,
   missing_by_group = TRUE,
   missing_any_group = TRUE,
   missing_include_qc = FALSE,
+  missing_absent_threshold = NULL,
+  missing_sample_iqr = 3,
+  drift_method = "QCRSC",
+  drift_args = list(),
+  remove_uncorrected = TRUE,
   impute_method = 0.2,
-  impute_method_post_drift = NULL,
   positive_only = TRUE,
-  correct_drift = TRUE,
-  remove_uncorrected = FALSE,
-  spline_smooth = 0,
-  spline_spar_limit = c(-1.5, 1.5),
-  correct_on_log = TRUE,
-  min_qc_per_batch = 5L,
   normalize_method = "median",
   normalize_ref_sample = NULL,
   normalize_qc_method = "none",
   transform_method = "log10",
-  scale_nonpls = "auto",
-  scale_pls = "pareto",
   rsd_threshold = 0.3,
   rsd_qc_type = "QC",
   variance_percentile = 10,
+  scale_nonpls = "auto",
+  scale_pls = "pareto",
   merge_replicates = FALSE,
   track = NULL,
   verbose = TRUE
@@ -55,9 +54,9 @@ run_DIpreprocess(
 \method{summary}{run_DIpreprocess_multi}(object, ...)
 }
 \arguments{
-\item{x}{Matrix or data frame. Numeric feature data with \strong{samples in rows}
-and \strong{features in columns}. All values should be non-negative raw intensities;
-zeros are treated as missing internally.
+\item{x}{Matrix or data frame. Numeric feature data with \strong{samples in
+rows} and \strong{features in columns}. All values should be non-negative
+raw intensities; zeros are treated as missing.
 For \code{print()}, a \code{run_DIpreprocess} or \code{run_DIpreprocess_multi} object.}
 
 \item{metadata}{Data frame. Sample metadata with \code{nrow(metadata) == nrow(x)},
@@ -78,8 +77,8 @@ Default: \code{c("QC", "SQC", "EQC")}.}
 (numeric or character). Required for drift correction. Default: \code{"Batch"}.}
 
 \item{injection_col}{Character. Column in \code{metadata} containing the numeric
-injection order (unique values). Required for drift correction. Default:
-\code{"InjectionSequence"}.}
+injection order (unique values). Required for QC-based drift correction.
+Default: \code{"InjectionSequence"}.}
 
 \item{norm_factor_col}{Character or \code{NULL}. Column in \code{metadata}
 containing sample-specific normalization factors (e.g. creatinine
@@ -104,50 +103,59 @@ subject identifiers for technical-replicate merging. Default: \code{"SubjectID"}
 \item{outliers}{Character vector or \code{NULL}. Sample identifiers (row names
 after applying \code{sample_id_col}) to remove before processing. Default: \code{NULL}.}
 
-\item{missing_threshold}{Numeric [0, 1]. Passed to \code{\link[=run_filtermissing]{run_filtermissing()}}
-as \code{threshold}. Default: \code{0.2}.}
+\item{blank_types}{Character vector or \code{NULL}. Labels in \code{group_col} of
+procedural blank samples. When given, potential contaminants are flagged
+and the unstable ones removed with \code{\link[=run_filterblank]{run_filterblank()}} (QComics rules),
+and the blank samples are then dropped. Default: \code{NULL} (no blank step).}
+
+\item{missing_threshold}{Numeric [0, 1]. Maximum proportion of missing
+values allowed, passed to \code{\link[=run_filtermissing]{run_filtermissing()}} as \code{threshold}.
+Default: \code{0.2}.}
 
 \item{missing_by_group}{Logical. If \code{TRUE}, assess missingness per group.
 Default: \code{TRUE}.}
 
 \item{missing_any_group}{Logical. Only used when \code{missing_by_group = TRUE}.
-If \code{TRUE} (default), a feature is retained if its missingness is below
-the threshold in at least one group (Modified 80\% Rule). If \code{FALSE},
-it must satisfy the threshold in all groups.}
+If \code{TRUE} (default), a feature is retained if it passes the threshold in
+at least one group (modified 80\% rule). If \code{FALSE}, it must pass in all
+groups.}
 
 \item{missing_include_qc}{Logical. If \code{TRUE}, include QC samples when
 assessing missingness. Default: \code{FALSE}.}
 
+\item{missing_absent_threshold}{Numeric or \code{NULL}. Passed to
+\code{\link[=run_filtermissing]{run_filtermissing()}} as \code{absent_threshold}: features missing in more
+than this proportion of a group are kept as truly absent (zeros) there
+(QComics uses \code{0.7}). Default: \code{NULL} (off).}
+
+\item{missing_sample_iqr}{Numeric or \code{NULL}. Passed to
+\code{\link[=run_filtermissing]{run_filtermissing()}} as \code{sample_iqr}: samples whose missingness over the
+commonly detected features is abnormally high within their group (more
+than \code{missing_sample_iqr} interquartile ranges above the third quartile)
+are removed as likely failed injections, as QComics recommends. \code{NULL}
+disables the check. Default: \code{3}.}
+
+\item{drift_method}{Character. Signal drift and batch correction method
+passed to \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}}: \code{"QCRSC"} (default), \code{"tGAM"},
+\code{"rGAM"}, \code{"rLOESS"}, \code{"ComBat"}, or \code{"none"} to skip the step.}
+
+\item{drift_args}{Named list of further arguments for
+\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}}, e.g.
+\code{list(spline_smooth_param = 0.5, min_QC = 4)} or
+\code{list(sample_weight = 0.2, qc_check = TRUE)}. Default: \code{list()}.}
+
+\item{remove_uncorrected}{Logical. If \code{TRUE} (default), remove features
+that drift correction could not correct in every batch (too few QC
+values). If \code{FALSE}, keep them with their original values in those
+batches. See \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}}.}
+
 \item{impute_method}{Imputation method passed to \code{\link[=run_mvimpute]{run_mvimpute()}} as
 \code{method}: a fraction (e.g. \code{0.2} = one fifth of the smallest positive
 value per feature), \code{"quantileregression"}, a \pkg{mice} method, or
-\code{"none"}. Default: \code{0.2}.}
-
-\item{impute_method_post_drift}{Imputation method for any missing values
-remaining (or introduced) after drift correction. If \code{NULL} (default),
-takes on the value of \code{impute_method}.}
+\code{"none"}. Imputation runs once, after drift correction. Default: \code{0.2}.}
 
 \item{positive_only}{Logical. If \code{TRUE}, the minimum used by fractional
 imputation only considers positive values. Default: \code{TRUE}.}
-
-\item{correct_drift}{Logical. If \code{TRUE}, apply QCRSC drift and batch
-correction via \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}}. Default: \code{TRUE}.}
-
-\item{remove_uncorrected}{Logical. If \code{TRUE}, remove features QCRSC
-could not correct. Default: \code{FALSE}.}
-
-\item{spline_smooth}{Numeric [0, 1]. QCRSC spline smoothing parameter;
-\code{0} selects it by cross-validation. Default: \code{0}.}
-
-\item{spline_spar_limit}{Numeric vector of length 2. Lower/upper bounds of
-the smoothing parameter searched during cross-validation.
-Default: \code{c(-1.5, 1.5)}.}
-
-\item{correct_on_log}{Logical. If \code{TRUE}, fit the QC spline on
-log-transformed data. Default: \code{TRUE}.}
-
-\item{min_qc_per_batch}{Integer. Minimum QC samples per batch for a feature
-to be corrected. Default: \code{5}.}
 
 \item{normalize_method}{Character or character vector. One or more
 normalization methods (see \code{\link[=run_normalize]{run_normalize()}} for details). When multiple
@@ -157,12 +165,9 @@ methods are supplied every method is paired with every element of
 \item \code{"sum"}: Normalizes by sum.
 \item \code{"median"}: Normalizes by median.
 \item \code{"specific_factor"}: Uses external factors in \code{norm_factor_col}.
-\item \code{"pqn_global"}: PQN using the median of all samples as reference.
+\item \code{"pqn_global"}: PQN using all samples as reference.
 \item \code{"pqn_reference"}: PQN using \code{normalize_ref_sample} as reference.
 \item \code{"pqn_group"}: PQN using pooled QC samples as reference.
-\item \code{"pqn"}, \code{"quantile"}: PQN via \pkg{pmp} (\code{"quantile"} is an
-alias kept for backward compatibility; it is not quantile normalization).
-\item \code{"col_rel_abundance"}, \code{"row_rel_abundance"}: relative abundance.
 \item \code{"none"}: No normalization.
 }
 Default: \code{"median"}.}
@@ -174,11 +179,21 @@ Default: \code{"median"}.}
 sample factors are used: \code{"mean"}, \code{"median"}, or \code{"none"}. Default: \code{"none"}.}
 
 \item{transform_method}{Character or character vector. One or more
-transformation methods (see \code{\link[=run_transform]{run_transform()}}): \code{"log2"}, \code{"log10"},
-\code{"sqrt"}, \code{"cbrt"}, \code{"clr"}, \code{"arcsin_sqrt"}, \code{"vsn"}, \code{"glog"}, or
-\code{"none"}. When multiple methods are supplied every method is paired with
-every element of \code{normalize_method} (Cartesian product).
+transformation methods (see \code{\link[=run_transform]{run_transform()}}): \code{"ln"}, \code{"log2"},
+\code{"log10"}, \code{"sqrt"}, \code{"cbrt"}, \code{"clr"}, \code{"arcsin_sqrt"}, \code{"vsn"},
+\code{"glog"}, or \code{"none"}. When multiple methods are supplied every method is
+paired with every element of \code{normalize_method} (Cartesian product).
 Default: \code{"log10"}.}
+
+\item{rsd_threshold}{Numeric [0, 1]. Features with QC RSD at or above this
+value are removed (\code{\link[=run_filterRSD]{run_filterRSD()}}). Default: \code{0.3}.}
+
+\item{rsd_qc_type}{Character. QC samples used for the RSD filter: \code{"QC"}
+(all \code{qc_types}), or one or more specific labels such as \code{"EQC"}.
+Default: \code{"QC"}.}
+
+\item{variance_percentile}{Numeric [0, 100]. Features in this bottom
+percentile of variance are removed (\code{\link[=run_filtervariance]{run_filtervariance()}}). Default: \code{10}.}
 
 \item{scale_nonpls}{Character or character vector. One or more scaling
 methods (see \code{\link[=run_scale]{run_scale()}}) for the NONPLS branch, intended for PCA,
@@ -190,16 +205,6 @@ components are appended to the combination name (e.g.
 \item{scale_pls}{Character or character vector. One or more scaling
 methods for the PLS branch, intended for PLS-DA/OPLS-DA. Default:
 \code{"pareto"}.}
-
-\item{rsd_threshold}{Numeric [0, 1]. Features with QC RSD at or above this
-value are removed (\code{\link[=run_filterRSD]{run_filterRSD()}}). Default: \code{0.3}.}
-
-\item{rsd_qc_type}{Character. QC type used for the RSD filter: \code{"QC"} (all
-\code{qc_types}), or one specific label such as \code{"EQC"} or \code{"SQC"}.
-Default: \code{"QC"}.}
-
-\item{variance_percentile}{Numeric [0, 100]. Features in this bottom
-percentile of variance are removed (\code{\link[=run_filtervariance]{run_filtervariance()}}). Default: \code{10}.}
 
 \item{merge_replicates}{Logical. Average technical replicates (non-QC rows
 sharing a \code{subject_id_col} value). Default: \code{FALSE}.}
@@ -222,17 +227,21 @@ list of class \code{run_DIpreprocess} with elements:
 \describe{
 \item{\code{data_nonpls}, \code{data_pls}}{Final data for the NONPLS and PLS
 branches (scaled with \code{scale_nonpls} / \code{scale_pls}).}
-\item{\code{data_raw}, \code{data_missing_filtered}, \code{data_imputed},
-\code{data_corrected}, \code{data_normalized}, \code{data_transformed}}{Data
-after each step (\code{data_normalized}/\code{data_transformed} are
-restricted to \code{features_final}).}
+\item{\code{data_raw}, \code{data_missing_filtered}, \code{data_corrected},
+\code{data_imputed}, \code{data_normalized}, \code{data_transformed}}{Data after
+each step (\code{data_normalized}/\code{data_transformed} are restricted to
+\code{features_final}). \code{data_raw} has zeros as \code{NA}; missing values
+remain up to \code{data_corrected}.}
 \item{\code{data_nonpls_merged}, \code{data_pls_merged}, \code{metadata_merged}}{
 Replicate-merged data and metadata, or \code{NULL}.}
 \item{\code{metadata}}{Standardized metadata with columns \code{Sample},
 \code{Group}, \code{Group_} (QC types collapsed to \code{"QC"}), \code{Batch},
 \code{InjectionSequence}, \code{SubjectID}.}
 \item{\code{features_final}}{Features that passed every filter.}
-\item{\code{uncorrected_features}}{Features QCRSC could not correct.}
+\item{\code{samples_removed}}{Samples removed for abnormally high
+missingness (see \code{missing_sample_iqr}).}
+\item{\code{uncorrected_features}}{Features drift correction could not
+correct in every batch.}
 \item{\code{dimensions}}{Data frame of samples x features after each step.}
 \item{\code{track}}{Data frame recording why tracked features were removed.}
 \item{\code{parameters}}{List of parameter values used.}
@@ -247,8 +256,8 @@ named list of class \code{run_DIpreprocess_multi}. Each element is a
 (e.g. \code{median_log10_auto}, \code{median_log10_auto_pareto}).
 Scale components are appended only for those arguments that have more
 than one unique value: \code{scale_nonpls} first, then \code{scale_pls}.
-The shared pre-normalization data (post-drift-correction) is stored in
-the \code{shared} attribute of the returned list.}
+The shared data (up to imputation) is stored in the \code{shared} attribute
+of the returned list.}
 }
 }
 \description{
@@ -259,67 +268,75 @@ execute in a fixed, reproducible order regardless of argument arrangement.
 When \code{normalize_method}, \code{transform_method}, \code{scale_nonpls}, and/or
 \code{scale_pls} are supplied as character vectors with more than one element,
 \strong{all combinations} are computed with three levels of deduplication:
-(1) the steps prior to normalization (validation, outlier removal,
-missing-value filtering, imputation, and drift/batch correction) run
-\strong{only once}; (2) normalization, transformation, and quality filtering
-run \strong{once per unique normalize x transform pair}; (3) scaling and
+(1) the steps up to and including imputation run \strong{only once};
+(2) normalization, transformation, and quality filtering run
+\strong{once per unique normalize x transform pair}; (3) scaling and
 replicate merging run \strong{once per full combination}. The return value
-in this case is a list of class \code{"run_DIpreprocess_multi"} whose elements
-are standard \code{run_DIpreprocess} objects (see Value for their names).
+is then a list of class \code{"run_DIpreprocess_multi"} whose elements are
+standard \code{run_DIpreprocess} objects (see Value for their names).
 }
 \details{
 \strong{Preprocessing Workflow (Fixed Order):}
 \enumerate{
 \item Input validation
-\item Outlier removal
-\item Missing-value filtering (\code{\link[=run_filtermissing]{run_filtermissing()}})
+\item Sample removal: \code{outliers}, then blank filtering and blank removal
+(\code{\link[=run_filterblank]{run_filterblank()}}) when \code{blank_types} is given
+\item Zeros to \code{NA}, then missing-value handling (\code{\link[=run_filtermissing]{run_filtermissing()}}):
+removal of samples with abnormally low detection rates, feature
+filtering, and optional truly-absent zeros
+\item Signal drift and batch correction (\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}}),
+on data that still contain missing values
 \item Missing-value imputation (\code{\link[=run_mvimpute]{run_mvimpute()}})
-\item Signal drift and batch correction (\code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}})
 \item \emph{[Per normalize x transform pair]} Normalization
 (\code{\link[=run_normalize]{run_normalize()}})
 \item \emph{[Per normalize x transform pair]} Transformation
 (\code{\link[=run_transform]{run_transform()}})
 \item \emph{[Per normalize x transform pair]} Quality filtering:
-QC-RSD on the normalized data (\code{\link[=run_filterRSD]{run_filterRSD()}}), then variance on the
-transformed data (\code{\link[=run_filtervariance]{run_filtervariance()}})
+QC-RSD on the measured (non-imputed) normalized values
+(\code{\link[=run_filterRSD]{run_filterRSD()}}), then variance on the transformed data
+(\code{\link[=run_filtervariance]{run_filtervariance()}})
 \item \emph{[Per full combination]} Scaling (\code{\link[=run_scale]{run_scale()}}) of the
 NONPLS and PLS branches
 \item \emph{[Per full combination]} Technical-replicate merging
 }
 
-Quality filtering is done \emph{before} scaling because the RSD of
-mean-centred data and the variance of auto-scaled data (always 1) carry no
-information. Both branches therefore share the same feature set,
-\code{features_final}.
+\strong{Why this order.} Drift correction comes before imputation because
+QC-based correction ignores missing values, whereas imputed QC values
+would bias the fitted trends (Kirwan et al., 2013); imputation therefore
+runs once, on corrected data. The QC-RSD leaves imputed values out: it
+measures the precision of measured values, and imputed near-minimum values
+among the QCs would inflate it. Quality filtering comes \emph{before}
+scaling because the RSD of mean-centred data and the variance of
+auto-scaled data (always 1) carry no information. Both branches therefore
+share the same feature set, \code{features_final}.
 
 The workflow follows the QC-based guidelines of Broadhurst et al. (2018)
-and the DIMS batch-correction strategy of Kirwan et al. (2013).
+and QComics (González-Domínguez et al., 2024) and the DIMS
+batch-correction strategy of Kirwan et al. (2013). The outlier-robust
+drift correction methods of Vynck et al. (2026) are available through
+\code{drift_method}.
 }
 \note{
-\strong{Zero Handling:} The pipeline automatically converts all \code{0} values in
-\code{x} to \code{NA} prior to analysis.
+\strong{Zero Handling:} The pipeline converts all \code{0} values in \code{x} to
+\code{NA} before analysis (unless \code{missing_absent_threshold} marks them as
+truly absent).
 
 \strong{Pre-flight checks:} Method names, and method-specific requirements
 (e.g. \code{norm_factor_col} for \code{"specific_factor"}, \code{normalize_ref_sample} for
-\code{"pqn_reference"}), are validated \emph{before} any preprocessing step, so
-errors surface early rather than mid-run. Errors raised inside a step are
-caught: the function returns an object whose \verb{$error} holds the message.
+\code{"pqn_reference"}, \code{drift_args} names), are validated \emph{before} any
+preprocessing step, so errors surface early rather than mid-run. Errors
+raised inside a step are caught: the function returns an object whose
+\verb{$error} holds the message.
 }
 \examples{
 data(dims_data)
 data(dims_metadata)
 
-res <- run_DIpreprocess(dims_data, dims_metadata, correct_drift = FALSE,
-                        verbose = FALSE)
+# Default pipeline, including QC-RSC drift correction
+res <- run_DIpreprocess(dims_data, dims_metadata, verbose = FALSE)
 res
 summary(res)
 dim(res$data_nonpls)
-
-# Full default pipeline, including QCRSC drift correction (slower: loads pmp)
-\donttest{
-res_drift <- run_DIpreprocess(dims_data, dims_metadata, verbose = FALSE)
-res_drift$parameters$correct_drift
-}
 
 # Multi-method mode: steps 1-5 run once, then every combination
 multi <- run_DIpreprocess(
@@ -327,11 +344,19 @@ multi <- run_DIpreprocess(
   normalize_method = c("median", "pqn_group"),
   transform_method = "log10",
   scale_nonpls     = c("auto", "pareto"),
-  correct_drift    = FALSE,
+  drift_method     = "none",
   verbose          = FALSE
 )
 names(multi)
 multi
+
+# Outlier-robust drift correction (Vynck et al., 2026; needs mgcv)
+\donttest{
+if (requireNamespace("mgcv", quietly = TRUE)) {
+  run_DIpreprocess(dims_data[, 1:20], dims_metadata, drift_method = "tGAM",
+                   drift_args = list(sample_weight = 0.2), verbose = FALSE)
+}
+}
 }
 \references{
 Broadhurst, D., Goodacre, R., Reinke, S.N., Kuligowski, J., Wilson, I.D.,
@@ -339,6 +364,12 @@ Lewis, M.R., & Dunn, W.B. (2018). Guidelines and considerations for the use
 of system suitability and quality control samples in mass spectrometry
 assays applied in untargeted clinical metabolomic studies.
 \emph{Metabolomics}, 14(6), 72. \doi{10.1007/s11306-018-1367-3}
+
+González-Domínguez, A., Estanyol-Torres, N., Brunius, C., Landberg, R., &
+González-Domínguez, R. (2024). QComics: Recommendations and guidelines for
+robust, easily implementable and reportable quality control of
+metabolomics data. \emph{Analytical Chemistry}, 96(3), 1064-1072.
+\doi{10.1021/acs.analchem.3c03660}
 
 Kirwan, J.A., Broadhurst, D.I., Davidson, R.L., & Viant, M.R. (2013).
 Characterising and correcting batch variation in an automated direct
@@ -351,6 +382,11 @@ van der Werf, M.J. (2006). Centering, scaling, and transformations:
 improving the biological information content of metabolomics data.
 \emph{BMC Genomics}, 7, 142. \doi{10.1186/1471-2164-7-142}
 
+Vynck, M., Vangeenderhuysen, P., De Paepe, E., Nawrot, T., Plekhova, V., &
+Vanhaecke, L. (2026). Robust metabolomics data normalization across scales
+and experimental designs. \emph{Analytical Chemistry}, 98(24), 17627-17637.
+\doi{10.1021/acs.analchem.5c06841}
+
 See the individual step functions for method-specific references.
 }
 \seealso{
@@ -361,6 +397,7 @@ example inputs.
 Other preprocessing steps:
 \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
 \code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filterblank]{run_filterblank()}},
 \code{\link[=run_filtermissing]{run_filtermissing()}},
 \code{\link[=run_filtervariance]{run_filtervariance()}},
 \code{\link[=run_mvimpute]{run_mvimpute()}},

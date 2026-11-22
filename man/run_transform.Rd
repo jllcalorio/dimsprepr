@@ -22,6 +22,7 @@ For \code{print()}, a \code{run_transform} object.}
 
 \item{method}{Character. Transformation method to apply. Options:
 \itemize{
+\item \code{"ln"}: Natural log transformation
 \item \code{"log2"}: Log base 2 transformation
 \item \code{"log10"}: Log base 10 transformation
 \item \code{"sqrt"}: Square root transformation
@@ -59,7 +60,7 @@ heteroscedasticity in metabolomics data.
 Transformations reduce heteroscedasticity and right skew so that fold
 changes become additive (van den Berg et al., 2006).
 
-\strong{log2/log10}: Logarithmic compression. If the data contain non-positive
+\strong{ln/log2/log10}: Logarithmic compression. If the data contain non-positive
 values, a global shift of \code{abs(min(x)) + 1} is added first (reported in
 \code{shift_applied}).
 
@@ -90,11 +91,9 @@ res <- run_transform(x, method = "log10")
 res
 range(res$data)
 
-# glog uses QC samples, so it needs metadata
-\donttest{
-data(dims_metadata)
-run_transform(x, method = "glog", metadata = dims_metadata, verbose = FALSE)
-}
+# glog optimises its parameter on the QC samples, so it needs metadata
+# (and the pmp package):
+# run_transform(x, method = "glog", metadata = dims_metadata)
 }
 \references{
 Aitchison, J. (1982). The statistical analysis of compositional data.
@@ -128,6 +127,7 @@ Other preprocessing steps:
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
 \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
 \code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filterblank]{run_filterblank()}},
 \code{\link[=run_filtermissing]{run_filtermissing()}},
 \code{\link[=run_filtervariance]{run_filtervariance()}},
 \code{\link[=run_mvimpute]{run_mvimpute()}},

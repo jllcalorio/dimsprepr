@@ -10,7 +10,6 @@ run_filterRSD(
   metadata,
   max_rsd = 0.3,
   group_col = "Group",
-  qc_type = "QC",
   qc_types = c("QC", "SQC", "EQC"),
   verbose = TRUE
 )
@@ -18,87 +17,62 @@ run_filterRSD(
 \method{print}{run_filterRSD}(x, ...)
 }
 \arguments{
-\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
+\item{x}{Matrix or data frame. Non-negative intensities with samples in
+rows and features in columns.
 For \code{print()}, a \code{run_filterRSD} object.}
 
-\item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).
-Must contain column specified by \code{group_col} to identify QC samples.}
+\item{metadata}{Data frame. Sample metadata with \code{nrow(metadata) == nrow(x)}.}
 
-\item{max_rsd}{Numeric. Maximum allowed RSD (0-1). Features with RSD >= this
-threshold in QC samples are removed. Default: 0.3 (30\%).}
+\item{max_rsd}{Numeric in [0, 1]. Maximum allowed RSD. Features with a QC
+RSD of \code{max_rsd} or more are removed. Default: \code{0.3} (30\%).}
 
-\item{group_col}{Character. Name of column in \code{metadata} containing sample group labels.
-Default: "Group".}
+\item{group_col}{Character. Column in \code{metadata} with group labels.
+Default: \code{"Group"}.}
 
-\item{qc_type}{Character. QC sample type to use for RSD calculation. Options:
-\itemize{
-\item \code{"EQC"}: Extract QC samples (diluted sample pool)
-\item \code{"SQC"}: Sample QC samples (undiluted sample pool)
-\item \code{"QC"}: Any QC sample, i.e. every label in \code{qc_types}
-(use when both EQC and SQC are present, or there is no distinction)
-}
-Default: "QC".}
+\item{qc_types}{Character vector. Labels in \code{group_col} of the QC samples
+used to compute the RSD. Give a single label (e.g. \code{"EQC"}) to use only
+that QC type. Default: \code{c("QC", "SQC", "EQC")}.}
 
-\item{qc_types}{Character vector. Group labels that should be treated as QC samples.
-Default: c("QC", "SQC", "EQC").}
-
-\item{verbose}{Logical. Print progress messages. Default: TRUE.}
+\item{verbose}{Logical. Print progress messages. Default: \code{TRUE}.}
 
 \item{...}{Ignored.}
 }
 \value{
 A list of class \code{"run_filterRSD"} containing:
-\item{data}{Matrix or data frame of filtered data (same class as input \code{x})}
-\item{features_removed}{Character vector of removed feature names}
-\item{features_kept}{Character vector of retained feature names}
-\item{rsd_values}{Numeric vector of RSD values for all original features}
-\item{n_features_before}{Integer. Number of features before filtering}
-\item{n_features_after}{Integer. Number of features after filtering}
-\item{n_features_removed}{Integer. Number of features removed}
-\item{parameters}{List of parameters used}
+\item{data}{Filtered data (same class as \code{x}).}
+\item{features_removed, features_kept}{Character vectors of feature names.}
+\item{rsd_values}{Named numeric vector of QC RSDs for all input features.}
+\item{n_features_before, n_features_after, n_features_removed}{Integers.}
+\item{parameters}{List of parameters used.}
 }
 \description{
-Removes features with high relative standard deviation (RSD, also known as
-coefficient of variation) in quality control samples. High RSD indicates
-poor analytical reproducibility.
+Removes features with a high relative standard deviation (RSD, also known
+as coefficient of variation) across quality control samples. A high QC
+RSD indicates poor analytical reproducibility.
 }
 \details{
-\strong{Relative Standard Deviation (RSD):}
-
-RSD is calculated per feature over the selected QC samples as
-RSD = SD / Mean (missing values ignored). Features whose RSD cannot be
-computed (e.g. no observed QC values) are removed, matching
+RSD is calculated per feature over the selected QC samples as SD / mean,
+ignoring missing values. Being scale-independent, it allows features of
+different magnitudes to be compared. Features whose RSD cannot be computed
+(e.g. no observed QC values) are removed, as in
 \code{\link[pmp:filter_peaks_by_rsd]{pmp::filter_peaks_by_rsd()}}.
 
-\strong{Apply to non-negative intensities}, i.e. before mean-centering or
-scaling; RSD of centred data is meaningless. A warning is issued if any QC
-mean is <= 0.
+Pooled QC samples share one biological matrix, so their variability is
+technical: poor reproducibility, instrument instability, ion suppression,
+or proximity to the detection limit.
 
-Also known as coefficient of variation (CV), RSD expresses variability
-as a proportion of the mean, making it scale-independent and suitable
-for comparing features with different magnitudes.
+\strong{Apply to measured, non-negative intensities}: before mean-centering or
+scaling, since the RSD of centred data is meaningless (a warning is issued
+if any QC mean is <= 0), and without imputed values (set them to \code{NA}),
+since near-minimum imputed values among the QCs inflate the RSD.
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} does both.
 
-\strong{Why Filter by RSD:}
-
-Quality control samples should have low variability since they represent
-the same biological matrix. High RSD in QC samples indicates:
-\itemize{
-\item Poor analytical reproducibility
-\item Instrument instability
-\item Ion suppression/enhancement effects
-\item Features near detection limit
-}
-
-\strong{Typical RSD Thresholds:}
-\itemize{
-\item Stringent: 20\% (0.2) - high-quality data only
-\item Standard: 30\% (0.3) - recommended for most metabolomics studies
-\item Lenient: 40\% (0.4) - when sample size is limited
-}
-
-Broadhurst et al. (2018) recommend removing features with QC RSD above
-20\% (0.2) for untargeted studies, or 30\% (0.3) as a commonly used upper
-limit.
+\strong{Thresholds.} Broadhurst et al. (2018) recommend removing features with
+QC RSD above 20\% for untargeted studies, with 30\% as a common upper limit;
+QComics uses RSD < 30\% as the acceptance criterion for peak intensities
+(González-Domínguez et al., 2024). Vynck et al. (2026) caution that a low
+QC RSD is a weak proxy for good drift correction, as it rewards
+overfitting.
 }
 \examples{
 data(dims_data)
@@ -111,9 +85,10 @@ res
 round(head(res$rsd_values), 3)
 }
 \references{
-Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control, Batch Correction,
-Exploration & Data Cleaning (Version 2.1). Zenodo. \doi{10.5281/zenodo.16824822}.
-Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
+Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control,
+Batch Correction, Exploration & Data Cleaning (Version 2.1). Zenodo.
+\doi{10.5281/zenodo.16824822}. Retrieved from
+\url{https://github.com/broadhurstdavid/QC-MXP}.
 
 Broadhurst, D., Goodacre, R., Reinke, S.N., Kuligowski, J., Wilson, I.D.,
 Lewis, M.R., & Dunn, W.B. (2018). Guidelines and considerations for the use
@@ -121,9 +96,20 @@ of system suitability and quality control samples in mass spectrometry
 assays applied in untargeted clinical metabolomic studies.
 \emph{Metabolomics}, 14(6), 72. \doi{10.1007/s11306-018-1367-3}
 
+González-Domínguez, A., Estanyol-Torres, N., Brunius, C., Landberg, R., &
+González-Domínguez, R. (2024). QComics: Recommendations and guidelines for
+robust, easily implementable and reportable quality control of
+metabolomics data. \emph{Analytical Chemistry}, 96(3), 1064-1072.
+\doi{10.1021/acs.analchem.3c03660}
+
 Jankevics, A., Lloyd, G.R., & Weber, R.J.M. (2025). \emph{pmp: Peak Matrix
 Processing and signal batch correction for metabolomics datasets}.
 R package. \doi{10.18129/B9.bioc.pmp}
+
+Vynck, M., Vangeenderhuysen, P., De Paepe, E., Nawrot, T., Plekhova, V., &
+Vanhaecke, L. (2026). Robust metabolomics data normalization across scales
+and experimental designs. \emph{Analytical Chemistry}, 98(24), 17627-17637.
+\doi{10.1021/acs.analchem.5c06841}
 }
 \seealso{
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}} for the full pipeline.
@@ -131,6 +117,7 @@ R package. \doi{10.18129/B9.bioc.pmp}
 Other preprocessing steps:
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
 \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
+\code{\link[=run_filterblank]{run_filterblank()}},
 \code{\link[=run_filtermissing]{run_filtermissing()}},
 \code{\link[=run_filtervariance]{run_filtervariance()}},
 \code{\link[=run_mvimpute]{run_mvimpute()}},

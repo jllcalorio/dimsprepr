@@ -42,12 +42,14 @@
 #' bias downstream tests while reducing the multiple-testing burden
 #' (Hackstadt & Hess, 2009).
 #'
-#' **Apply before scaling.** Auto-scaling sets every feature's variance to 1,
-#' and mean-centering/Pareto scaling distort the ranking, so run this filter on
-#' normalized or transformed data. [run_DIpreprocess()] does this for you.
+#' **Apply before scaling.** Auto-scaling sets every feature's variance to 1
+#' (and VAST scaling reweights it), so the variance ranking is lost; run this
+#' filter on normalized or transformed data. [run_DIpreprocess()] does this
+#' for you.
 #'
 #' Features with zero or non-finite variance are always removed. Features with
-#' variance at or below the percentile cutoff are removed.
+#' variance at or below the percentile cutoff are removed (none when
+#' `percentile = 0`).
 #'
 #' @author John Lennon L. Calorio
 #'
@@ -117,7 +119,8 @@ run_filtervariance <- function(
   }
 
   var_threshold <- stats::quantile(variances[valid_var_indices], percentile / 100, na.rm = TRUE)
-  features_to_keep <- (variances > var_threshold) & valid_var_indices
+  # percentile = 0 removes nothing (quantile(0) is the minimum itself)
+  features_to_keep <- (variances > var_threshold | percentile == 0) & valid_var_indices
 
   x_filtered <- x_matrix[, features_to_keep, drop = FALSE]
   features_kept <- feature_names[features_to_keep]

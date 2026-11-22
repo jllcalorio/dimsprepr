@@ -10,7 +10,6 @@ run_mvimpute(
   method = 0.2,
   positive_only = TRUE,
   tune_sigma = 1,
-  m = 5,
   maxit = 5,
   seed = NA,
   verbose = TRUE,
@@ -44,9 +43,6 @@ Default: \code{0.2}.}
 \item{tune_sigma}{Numeric. Only used when \code{method = "quantileregression"}.
 Controls the standard deviation of the left-censored distribution.
 Default: \code{1}.}
-
-\item{m}{Integer. Only used with \pkg{mice} methods. Number of imputations.
-Default: \code{5}.}
 
 \item{maxit}{Integer. Only used with \pkg{mice} methods. Number of
 iterations. Default: \code{5}.}
@@ -89,11 +85,16 @@ recommended.
 \item \strong{mice:} Multiple Imputation by Chained Equations (van Buuren &
 Groothuis-Oudshoorn, 2011) via \code{\link[mice:mice]{mice::mice()}}, with a predictor matrix
 from \code{\link[mice:quickpred]{mice::quickpred()}} unless \code{predictorMatrix} is supplied in \code{...}.
-Requires \pkg{mice}. Only the first completed data set is returned.
+Requires \pkg{mice}. A single imputation (\code{m = 1}) is run, as one
+completed data set is returned for preprocessing. \code{method = "rf"} gives
+the random-forest imputation that QComics suggests for values missing
+for analytical reasons (González-Domínguez et al., 2024).
 }
 
 Wei et al. (2018) compare these strategies on mass spectrometry
-metabolomics data.
+metabolomics data. Impute after drift correction: QC-based correction
+ignores missing values, whereas imputed QC values would distort the trend
+(see \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}}).
 }
 \examples{
 data(dims_data)
@@ -110,6 +111,12 @@ if (requireNamespace("imputeLCMD", quietly = TRUE)) {
 }
 }
 \references{
+González-Domínguez, A., Estanyol-Torres, N., Brunius, C., Landberg, R., &
+González-Domínguez, R. (2024). QComics: Recommendations and guidelines for
+robust, easily implementable and reportable quality control of
+metabolomics data. \emph{Analytical Chemistry}, 96(3), 1064-1072.
+\doi{10.1021/acs.analchem.3c03660}
+
 Lazar, C., Gatto, L., Ferro, M., Bruley, C., & Burger, T. (2016).
 Accounting for the multiple natures of missing values in label-free
 quantitative proteomics data sets to compare imputation strategies.
@@ -132,6 +139,7 @@ Other preprocessing steps:
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
 \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
 \code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filterblank]{run_filterblank()}},
 \code{\link[=run_filtermissing]{run_filtermissing()}},
 \code{\link[=run_filtervariance]{run_filtervariance()}},
 \code{\link[=run_normalize]{run_normalize()}},

@@ -32,14 +32,22 @@ test_that("run_normalize pqn_group method works", {
   expect_s3_class(res, "run_normalize")
 })
 
-test_that("run_normalize quantile maps to pqn", {
+test_that("removed duplicate methods are rejected with a clear error", {
   td <- make_test_data()
-  td$x[is.na(td$x)] <- 100
-  td$x[td$x == 0] <- 1
-  # quantile should not error (it aliases to pqn); may warn if pmp not installed
-  skip_if_not_installed("pmp")
-  res <- run_normalize(td$x, td$metadata, method = "quantile", verbose = FALSE)
-  expect_s3_class(res, "run_normalize")
+  for (m in c("quantile", "pqn", "row_rel_abundance", "col_rel_abundance"))
+    expect_error(run_normalize(td$x, td$metadata, method = m, verbose = FALSE), "Unknown")
+})
+
+test_that("PQN equals the median quotient to the reference spectrum", {
+  x <- matrix(c(2, 4, 6, 1, 2, 3, 4, 8, 12), nrow = 3,
+              dimnames = list(NULL, c("a", "b", "c")))   # row r = r * (2, 1, 4)
+  meta <- data.frame(Group = c("QC", "A", "A"))
+  res <- run_normalize(x, meta, method = "pqn_group", verbose = FALSE)
+  expect_equal(res$normalization_factors, c(1, 2, 3))
+  expect_equal(unname(res$data), matrix(rep(c(2, 1, 4), each = 3), 3))
+  mean_ref <- run_normalize(x, meta, method = "pqn_global", reference_method = "mean",
+                            verbose = FALSE)
+  expect_equal(mean_ref$normalization_factors, c(0.5, 1, 1.5))
 })
 
 test_that("run_normalize rejects bad inputs", {
@@ -67,11 +75,11 @@ test_that("pqn_group honours group_sample", {
                              verbose = FALSE), "No 'zzz' samples")
 })
 
-test_that("run_normalize validates qc_normalize and reports pqn factors", {
+test_that("run_normalize validates qc_normalize and reference_method", {
   x <- dims_clean(1:10)
   expect_error(run_normalize(x, dims_metadata, qc_normalize = "bogus"), "should be one of")
-  skip_if_not_installed("pmp")
-  res <- run_normalize(x, dims_metadata, method = "pqn", verbose = FALSE)
+  expect_error(run_normalize(x, dims_metadata, reference_method = "mode"), "should be one of")
+  res <- run_normalize(x, dims_metadata, method = "pqn_group", verbose = FALSE)
   expect_false(anyNA(res$normalization_factors))
 })
 

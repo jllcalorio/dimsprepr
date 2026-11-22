@@ -27,8 +27,6 @@
 #' @param tune_sigma Numeric. Only used when `method = "quantileregression"`.
 #'   Controls the standard deviation of the left-censored distribution.
 #'   Default: `1`.
-#' @param m Integer. Only used with \pkg{mice} methods. Number of imputations.
-#'   Default: `5`.
 #' @param maxit Integer. Only used with \pkg{mice} methods. Number of
 #'   iterations. Default: `5`.
 #' @param seed Integer or `NA`. Only used with \pkg{mice} methods. Random seed.
@@ -62,14 +60,25 @@
 #' 3. **mice:** Multiple Imputation by Chained Equations (van Buuren &
 #'    Groothuis-Oudshoorn, 2011) via [mice::mice()], with a predictor matrix
 #'    from [mice::quickpred()] unless `predictorMatrix` is supplied in `...`.
-#'    Requires \pkg{mice}. Only the first completed data set is returned.
+#'    Requires \pkg{mice}. A single imputation (`m = 1`) is run, as one
+#'    completed data set is returned for preprocessing. `method = "rf"` gives
+#'    the random-forest imputation that QComics suggests for values missing
+#'    for analytical reasons (González-Domínguez et al., 2024).
 #'
 #' Wei et al. (2018) compare these strategies on mass spectrometry
-#' metabolomics data.
+#' metabolomics data. Impute after drift correction: QC-based correction
+#' ignores missing values, whereas imputed QC values would distort the trend
+#' (see [run_driftBatchCorrect()]).
 #'
 #' @author John Lennon L. Calorio
 #'
 #' @references
+#' González-Domínguez, A., Estanyol-Torres, N., Brunius, C., Landberg, R., &
+#' González-Domínguez, R. (2024). QComics: Recommendations and guidelines for
+#' robust, easily implementable and reportable quality control of
+#' metabolomics data. *Analytical Chemistry*, 96(3), 1064-1072.
+#' \doi{10.1021/acs.analchem.3c03660}
+#'
 #' Lazar, C., Gatto, L., Ferro, M., Bruley, C., & Burger, T. (2016).
 #' Accounting for the multiple natures of missing values in label-free
 #' quantitative proteomics data sets to compare imputation strategies.
@@ -108,7 +117,6 @@ run_mvimpute <- function(
     method        = 0.2,
     positive_only = TRUE,
     tune_sigma    = 1,
-    m             = 5,
     maxit         = 5,
     seed          = NA,
     verbose       = TRUE,
@@ -135,7 +143,7 @@ run_mvimpute <- function(
         imputed_summary  = data.frame(Feature = colnames(x_matrix),
                                        N_Missing = 0L, Imputation_Value = NA_real_),
         parameters  = list(method = method, positive_only = positive_only,
-                           tune_sigma = tune_sigma, m = m, maxit = maxit, seed = seed),
+                           tune_sigma = tune_sigma, maxit = maxit, seed = seed),
         method_used = "None (no missing values)"
       ),
       class = "run_mvimpute"
@@ -181,7 +189,7 @@ run_mvimpute <- function(
       Min_Value = min_vals, Imputation_Value = imputation_vals
     )
     params_out <- list(method = method, positive_only = positive_only,
-                       tune_sigma = NA, m = NA, maxit = NA, seed = NA)
+                       tune_sigma = NA, maxit = NA, seed = NA)
 
   } else if (is.character(method)) {
 
@@ -197,7 +205,7 @@ run_mvimpute <- function(
           imputed_summary  = data.frame(Feature = colnames(x_matrix),
                                          N_Missing = colSums(is.na(x_matrix)), Method = "None"),
           parameters  = list(method = method, positive_only = positive_only,
-                             tune_sigma = tune_sigma, m = m, maxit = maxit, seed = seed),
+                             tune_sigma = tune_sigma, maxit = maxit, seed = seed),
           method_used = "None"
         ),
         class = "run_mvimpute"
@@ -225,26 +233,27 @@ run_mvimpute <- function(
       imputed_summary <- data.frame(Feature = colnames(x_matrix),
                                      N_Missing = colSums(na_indices), Method = "QRILC")
       params_out <- list(method = method, positive_only = NA,
-                         tune_sigma = tune_sigma, m = NA, maxit = NA, seed = NA)
+                         tune_sigma = tune_sigma, maxit = NA, seed = NA)
 
     } else {
 
       # -- mice ---------------------------------------------------------------
       if (!requireNamespace("mice", quietly = TRUE))
         stop("Package 'mice' required. Install with: install.packages('mice')", call. = FALSE)
-      if (!is.numeric(m) || length(m) != 1L || m < 1L)
-        stop("'m' must be a single positive integer.", call. = FALSE)
       if (!is.numeric(maxit) || length(maxit) != 1L || maxit < 1L)
         stop("'maxit' must be a single positive integer.", call. = FALSE)
 
-      msg(sprintf("Using mice imputation (method = '%s', m = %d, maxit = %d).",
-                  method, as.integer(m), as.integer(maxit)))
+      msg(sprintf("Using mice imputation (method = '%s', maxit = %d).",
+                  method, as.integer(maxit)))
       na_indices <- is.na(x_matrix)
+      # mice builds formulas from column names, so use syntactic ones meanwhile
+      mice_data <- as.data.frame(x_matrix)
+      names(mice_data) <- paste0("V", seq_len(ncol(mice_data)))
 
       dots <- list(...)
       if (is.null(dots$predictorMatrix)) {
         dots$predictorMatrix <- tryCatch(
-          mice::quickpred(as.data.frame(x_matrix)),
+          mice::quickpred(mice_data),
           error = function(e) stop("mice::quickpred() failed: ", e$message, call. = FALSE)
         )
         msg("Predictor matrix built via mice::quickpred().")
@@ -252,23 +261,22 @@ run_mvimpute <- function(
 
       tryCatch({
         mice_obj <- do.call(mice::mice, c(
-          list(data = as.data.frame(x_matrix), method = method,
-               m = as.integer(m), maxit = as.integer(maxit),
+          list(data = mice_data, method = method,
+               m = 1L, maxit = as.integer(maxit),
                seed = if (is.na(seed)) NA_integer_ else as.integer(seed),
                printFlag = FALSE),
           dots
         ))
-        x_matrix <- as.matrix(mice::complete(mice_obj, action = 1L))
+        x_matrix[] <- as.matrix(mice::complete(mice_obj, action = 1L))
       }, error = function(e) {
         stop("mice imputation failed: ", e$message, call. = FALSE)
       })
 
-      method_description <- sprintf("mice: %s (m = %d, maxit = %d)",
-                                    method, as.integer(m), as.integer(maxit))
+      method_description <- sprintf("mice: %s (maxit = %d)", method, as.integer(maxit))
       imputed_summary <- data.frame(Feature = colnames(x_matrix),
                                      N_Missing = colSums(na_indices), Method = method)
       params_out <- list(method = method, positive_only = NA, tune_sigma = NA,
-                         m = as.integer(m), maxit = as.integer(maxit),
+                         maxit = as.integer(maxit),
                          seed = if (is.na(seed)) NA_integer_ else as.integer(seed))
     }
 

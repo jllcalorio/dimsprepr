@@ -12,7 +12,7 @@ test_that("plot_dist_beforeafter returns four ggplots and a gtable", {
 })
 
 test_that("plot_dist_beforeafter feature mode and run_DIpreprocess input", {
-  res <- run_DIpreprocess(dims_data, dims_metadata, correct_drift = FALSE, verbose = FALSE)
+  res <- run_DIpreprocess(dims_data, dims_metadata, drift_method = "none", verbose = FALSE)
   pdf(NULL); on.exit(dev.off())
   out <- suppressMessages(plot_dist_beforeafter(res, group_by = "feature",
                                                 plot_what = res$features_final[1:5]))
@@ -26,4 +26,12 @@ test_that("plot_dist_beforeafter validates inputs", {
   expect_error(plot_dist_beforeafter(x, x * 2, plot_what = "zz"), "not found")
   expect_error(plot_dist_beforeafter(x, x * 2, n_random = 0), "n_random")
   expect_warning(suppressMessages(plot_dist_beforeafter(x, x)), "identical")
+})
+
+test_that("plot_dist_beforeafter result prints the combined plot", {
+  x <- log10(dims_clean(1:10))
+  pdf(NULL); on.exit(dev.off())
+  res <- plot_dist_beforeafter(x, x * 2, n_random = 5)
+  expect_s3_class(res, "dimsprepr_dist_plot")
+  expect_silent(print(res))
 })

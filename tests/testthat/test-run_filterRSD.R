@@ -5,7 +5,7 @@ test_that("run_filterRSD returns correct class", {
   td$x[td$x == 0] <- 100
 
   res <- run_filterRSD(td$x, td$metadata, max_rsd = 0.5,
-                       qc_type = "QC", verbose = FALSE)
+                       verbose = FALSE)
   expect_s3_class(res, "run_filterRSD")
   expect_equal(nrow(res$data), nrow(td$x))
   expect_true(ncol(res$data) <= ncol(td$x))
@@ -15,7 +15,7 @@ test_that("run_filterRSD warns when no QC samples found", {
   td <- make_test_data()
   td$metadata$Group <- "Sample"  # no QC
   expect_warning(
-    run_filterRSD(td$x, td$metadata, qc_type = "QC", verbose = FALSE),
+    run_filterRSD(td$x, td$metadata, verbose = FALSE),
     "No QC samples"
   )
 })
@@ -50,9 +50,9 @@ test_that("run_filterRSD warns on centred (non-positive mean) data", {
   expect_warning(run_filterRSD(x, meta, verbose = FALSE), "<= 0")
 })
 
-test_that("run_filterRSD qc_type selects one QC label", {
+test_that("run_filterRSD qc_types can select one QC label", {
   x <- cbind(F1 = c(10, 10.1, 9.9, 1, 50, 100, 7, 8))
   meta <- data.frame(Group = c("EQC", "EQC", "EQC", "SQC", "SQC", "SQC", "A", "A"))
-  expect_equal(run_filterRSD(x, meta, qc_type = "EQC", verbose = FALSE)$n_features_after, 1L)
-  expect_equal(run_filterRSD(x, meta, qc_type = "SQC", verbose = FALSE)$n_features_after, 0L)
+  expect_equal(run_filterRSD(x, meta, qc_types = "EQC", verbose = FALSE)$n_features_after, 1L)
+  expect_equal(run_filterRSD(x, meta, qc_types = "SQC", verbose = FALSE)$n_features_after, 0L)
 })

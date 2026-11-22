@@ -8,121 +8,189 @@
 run_driftBatchCorrect(
   x,
   metadata,
-  perform_correction = TRUE,
-  batch_corr_only = FALSE,
+  method = "QCRSC",
   injection_col = "InjectionSequence",
   batch_col = "Batch",
   group_col = "Group",
-  qc_label = "QC",
   qc_types = c("QC", "SQC", "EQC"),
-  spline_smooth_param = 0,
   min_QC = 5,
-  spar_limit = c(-1.5, 1.5),
   log_scale = TRUE,
+  remove_uncorrected = TRUE,
+  spline_smooth_param = 0,
+  spar_limit = c(-1.5, 1.5),
+  gam_k = 10,
+  sample_weight = 0,
+  qc_check = FALSE,
+  qc_check_p = 0.1,
   use_parametric = TRUE,
-  display_plots = FALSE,
   verbose = TRUE
 )
 
 \method{print}{run_driftBatchCorrect}(x, ...)
 }
 \arguments{
-\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
+\item{x}{Matrix or data frame of raw, non-negative intensities with samples
+in rows and features in columns. Missing values (\code{NA}) are allowed: they
+are ignored when fitting and stay missing, so impute \emph{after}
+correction. Zeros are also ignored when fitting and stay zero.
 For \code{print()}, a \code{run_driftBatchCorrect} object.}
 
-\item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).}
+\item{metadata}{Data frame with one row per row of \code{x}, in the same order.}
 
-\item{perform_correction}{Logical. If TRUE, perform correction; if FALSE, return
-original data unchanged. Default: TRUE.}
+\item{method}{Character. Correction method: \code{"QCRSC"} (default), \code{"tGAM"},
+\code{"rGAM"}, \code{"rLOESS"}, or \code{"ComBat"}. See Details.}
 
-\item{batch_corr_only}{Logical. If TRUE, perform only ComBat batch correction
-(no drift correction). If FALSE, perform QCRSC. Default: FALSE.}
+\item{injection_col}{Character. Column in \code{metadata} with the numeric,
+unique injection order. Not used by ComBat. Default: \code{"InjectionSequence"}.}
 
-\item{injection_col}{Character. Column in \code{metadata} containing injection order.
-Default: "InjectionSequence".}
+\item{batch_col}{Character. Column in \code{metadata} with batch labels (numeric
+or character). Default: \code{"Batch"}.}
 
-\item{batch_col}{Character. Column in \code{metadata} containing batch numbers.
-Default: "Batch".}
+\item{group_col}{Character. Column in \code{metadata} with sample group labels.
+Default: \code{"Group"}.}
 
-\item{group_col}{Character. Column in \code{metadata} containing sample group labels.
-Default: "Group".}
+\item{qc_types}{Character vector. Labels in \code{group_col} that identify QC
+samples. Default: \code{c("QC", "SQC", "EQC")}.}
 
-\item{qc_label}{Character. Group label identifying QC samples for QCRSC. Default: "QC".}
+\item{min_QC}{Integer, at least 4. Minimum number of observed (positive,
+non-missing) QC values a feature needs within a batch to be corrected in
+that batch. Default: \code{5}.}
 
-\item{qc_types}{Character vector. Group labels converted to \code{qc_label} internally.
-Default: c("QC", "SQC", "EQC").}
+\item{log_scale}{Logical. Fit the trend on log intensities (\code{TRUE},
+default) or on the raw scale. The correction is multiplicative either
+way. ComBat is applied to log intensities when \code{TRUE}.}
 
-\item{spline_smooth_param}{Numeric (0-1). Smoothing parameter (\code{spar})
-of the QC spline. \code{0} (default) chooses it per feature by
-cross-validation; larger values give smoother fits.}
+\item{remove_uncorrected}{Logical. If \code{TRUE} (default), features that could
+not be corrected in every batch (too few QC values, or a failed fit) are
+removed. If \code{FALSE} they are kept, with their original values in the
+batches that could not be corrected.}
 
-\item{min_QC}{Integer. Minimum number of QC samples with observed values a
-feature needs in a batch to be corrected; features below it are left
-uncorrected. Default: 5.}
+\item{spline_smooth_param}{Numeric in [0, 1]. QCRSC only. Smoothing
+parameter (\code{spar}) of \code{\link[stats:smooth.spline]{stats::smooth.spline()}}; \code{0} (default) selects it
+per feature and batch by leave-one-out cross-validation.}
 
-\item{spar_limit}{Numeric vector of length 2. Lower and upper limits of
-\code{spar} searched during cross-validation. Default: c(-1.5, 1.5).}
+\item{spar_limit}{Numeric vector of length 2. QCRSC only. Search range for
+\code{spar} when \code{spline_smooth_param = 0}. Default: \code{c(-1.5, 1.5)}.}
 
-\item{log_scale}{Logical. Fit the spline on log-transformed data. Default: TRUE.}
+\item{gam_k}{Integer, at least 3. tGAM and rGAM only. Maximum basis
+dimension of the thin plate regression spline; it is lowered
+automatically when a batch has few fitting points. Default: \code{10}.}
 
-\item{use_parametric}{Logical. Parametric (\code{TRUE}) or non-parametric
-empirical Bayes priors in ComBat. Default: TRUE.}
+\item{sample_weight}{Numeric in [0, 1]. tGAM and rGAM only. Weight of the
+biological samples relative to the QC samples (weight 1) in the trend
+fit. \code{0} (default) fits QCs only; \code{0.2} is the 5:1 QC-to-sample weighting
+used by Vynck et al. (2026).}
 
-\item{display_plots}{Logical. Draw ComBat's prior diagnostic plots. Default: FALSE.}
+\item{qc_check}{Logical. tGAM and rGAM only, and requires
+\code{sample_weight > 0}. If \code{TRUE}, test for every feature and batch whether
+the QC samples follow the same trend as the biological samples; where
+they do not (p < \code{qc_check_p}), fit the trend on the biological samples
+only. Default: \code{FALSE}.}
 
-\item{verbose}{Logical. Print progress. Default: TRUE.}
+\item{qc_check_p}{Numeric in (0, 1). p-value cutoff of the QC check.
+Default: \code{0.1}.}
+
+\item{use_parametric}{Logical. ComBat only. Use parametric (\code{TRUE},
+default) or non-parametric empirical Bayes priors.}
+
+\item{verbose}{Logical. Print progress messages. Default: \code{TRUE}.}
 
 \item{...}{Ignored.}
 }
 \value{
 A list of class \code{"run_driftBatchCorrect"} containing:
-\item{data}{Corrected data (same class as input \code{x})}
-\item{data_before_correction}{Original data before correction}
-\item{correction_applied}{Logical}
-\item{method_used}{Character: \code{"QCRSC"}, \code{"ComBat"}, or \code{"None"}}
-\item{uncorrected_features}{Character vector of features left unchanged
-(e.g. too few QC values)}
-\item{n_uncorrected}{Integer}
-\item{parameters}{List of parameters}
+\item{data}{Corrected data (same class as \code{x}), without the uncorrected
+features when \code{remove_uncorrected = TRUE}.}
+\item{data_before_correction}{The input data as a matrix-like object of
+the same class.}
+\item{method_used}{Character: the method applied.}
+\item{uncorrected}{Data frame with one row per feature and batch that
+could not be corrected (columns \code{Feature}, \code{Batch}).}
+\item{uncorrected_features}{Character vector of features not corrected
+in at least one batch.}
+\item{n_uncorrected}{Integer, \code{length(uncorrected_features)}.}
+\item{qc_check}{When \code{qc_check = TRUE}, a data frame with the QC check
+p-value per feature and batch and whether the trend was refitted on
+biological samples only (\code{Sample_based}); otherwise \code{NULL}.}
+\item{parameters}{List of parameters used.}
 }
 \description{
-Applies Quality Control-based Robust Spline Correction (QCRSC) or batch
-correction using ComBat to remove systematic signal drift and batch effects
-in metabolomics data.
+Removes within-batch signal drift and between-batch intensity differences.
+For every feature and batch, a smooth trend of intensity against injection
+order is fitted through the quality control (QC) samples and divided out.
+Four trend models are available: the classic QC-based robust spline
+correction (QC-RSC; Kirwan et al., 2013) and the outlier-robust rLOESS,
+rGAM and tGAM models of Vynck et al. (2026). ComBat (Johnson et al., 2007)
+corrects batch offsets without using QCs or injection order.
 }
 \details{
-\strong{QCRSC} (Quality Control-based Robust Spline Correction; Kirwan et al.,
-2013) fits, per feature and batch, a smoothing spline through the QC
-intensities against injection order and removes that trend from every
-sample, correcting within-batch drift and between-batch offsets in one
-step. It follows the QC-based correction approach of Dunn et al. (2011). Implemented by \code{\link[pmp:QCRSC]{pmp::QCRSC()}}. QC samples
-must be spread through every batch, starting and ending with a QC, with at
-least 4 (preferably 5 or more) per batch.
+\strong{Trend models.} For each feature and batch, a trend \eqn{f(t)} of the
+(log) intensity against injection order \eqn{t} is fitted and each value
+is corrected multiplicatively as \eqn{x \cdot m / f(t)}, where \eqn{m} is
+the median intensity of the feature over all samples (on the log scale,
+\eqn{f} is back-transformed first). Fitting each batch separately removes
+both the within-batch drift and the between-batch offsets.
+\itemize{
+\item \code{"QCRSC"}: a cubic smoothing spline through the QC samples
+(Kirwan et al., 2013), the spline version of the QC-RLSC approach of
+Dunn et al. (2011). The smoothing parameter is chosen by leave-one-out
+cross-validation unless \code{spline_smooth_param} fixes it. This matches
+\code{\link[pmp:QCRSC]{pmp::QCRSC()}} (Jankevics et al., 2025), except that values in
+batches that cannot be corrected are kept rather than set to \code{NA}.
+\item \code{"rLOESS"}: robust LOESS through the QC samples, with outliers
+down-weighted by Tukey's biweight (\code{loess(family = "symmetric")}) and the
+span chosen by generalized cross-validation (Vynck et al., 2026).
+Samples injected before the first or after the last QC of a batch get
+the trend value of the nearest QC.
+\item \code{"rGAM"}: a Gaussian additive model with a thin plate regression spline,
+fitted by REML, then refitted once with Tukey biweight weights
+\eqn{(1 - (r_i/c)^2)^2} computed from the residuals divided by their
+median absolute deviation, with \eqn{c = 4.685} (Vynck et al., 2026).
+\item \code{"tGAM"}: the same additive model with a scaled-t error distribution
+(\code{\link[mgcv:scat]{mgcv::scat()}}), whose heavy tails make the fit resistant to outlying
+QC values. Vynck et al. (2026) found tGAM best overall and proposed it as
+the default for LC-MS data; it is the slowest method.
+\item \code{"ComBat"}: empirical Bayes location and scale adjustment of batches
+(\code{\link[sva:ComBat]{sva::ComBat()}}); no drift correction. Requires \pkg{sva}.
+}
 
-\strong{ComBat} (\code{batch_corr_only = TRUE}; Johnson et al., 2007) uses
-empirical Bayes location/scale adjustment to remove batch effects without
-using QCs or injection order. Implemented by \code{\link[sva:ComBat]{sva::ComBat()}}. Requires
-\pkg{sva}. ComBat does not accept missing values, so impute first.
+rGAM and tGAM require \pkg{mgcv}. By default they are fitted on QC samples
+only, like QCRSC and rLOESS. With \code{sample_weight > 0} the biological
+samples also inform the trend, which helps when QCs are sparse, and
+\code{qc_check = TRUE} adds the QC representativeness check of Vynck et al.
+(2026). That check compares, with a likelihood ratio test on
+maximum-likelihood fits, one common trend against separate trends for QC
+and biological samples.
 
-Batch labels may be numeric or character.
+\strong{QC layout.} QC samples should be spread through each batch, ideally
+starting and ending it (González-Domínguez et al., 2024), with at least
+\code{min_QC} per batch. The function stops if a batch has fewer QC samples
+than \code{min_QC}. A feature with fewer than \code{min_QC} observed QC values in a
+batch is not corrected in that batch; see \code{remove_uncorrected}.
+
+\strong{Order of operations.} Correction runs on data with missing values, as
+QC-RSC was designed to (Kirwan et al., 2013): impute afterwards, otherwise
+imputed QC values distort the trend. \code{\link[=run_DIpreprocess]{run_DIpreprocess()}} follows this
+order.
 }
 \examples{
 data(dims_data)
 data(dims_metadata)
 raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
-x <- run_mvimpute(raw[, 1:10], verbose = FALSE)$data
 
-# QC-based drift + batch correction (QCRSC)
-res <- run_driftBatchCorrect(x, dims_metadata, spline_smooth_param = 0.5)
+# QC-based robust spline correction (missing values are fine)
+res <- run_driftBatchCorrect(raw[, 1:10], dims_metadata,
+                             spline_smooth_param = 0.5)
 res
 
-# ComBat batch correction only (requires sva)
-\donttest{
-if (requireNamespace("sva", quietly = TRUE)) {
-  run_driftBatchCorrect(x, dims_metadata, batch_corr_only = TRUE,
-                        verbose = FALSE)
+# Outlier-robust tGAM using QCs and, with a 5:1 weight, biological samples
+if (requireNamespace("mgcv", quietly = TRUE)) {
+  run_driftBatchCorrect(raw[, 1:2], dims_metadata, method = "tGAM",
+                        sample_weight = 0.2, verbose = FALSE)
 }
-}
+
+# ComBat (batch offsets only, needs sva) is called the same way:
+# run_driftBatchCorrect(raw, dims_metadata, method = "ComBat")
 }
 \references{
 Dunn, W.B., Broadhurst, D., Begley, P., Zelena, E., Francis-McIntyre, S.,
@@ -130,6 +198,16 @@ Anderson, N., et al. (2011). Procedures for large-scale metabolic profiling
 of serum and plasma using gas chromatography and liquid chromatography
 coupled to mass spectrometry. \emph{Nature Protocols}, 6(7), 1060-1083.
 \doi{10.1038/nprot.2011.335}
+
+González-Domínguez, A., Estanyol-Torres, N., Brunius, C., Landberg, R., &
+González-Domínguez, R. (2024). QComics: Recommendations and guidelines for
+robust, easily implementable and reportable quality control of
+metabolomics data. \emph{Analytical Chemistry}, 96(3), 1064-1072.
+\doi{10.1021/acs.analchem.3c03660}
+
+Jankevics, A., Lloyd, G.R., & Weber, R.J.M. (2025). \emph{pmp: Peak Matrix
+Processing and signal batch correction for metabolomics datasets}.
+R package. \doi{10.18129/B9.bioc.pmp}
 
 Johnson, W.E., Li, C., & Rabinovic, A. (2007). Adjusting batch effects in
 microarray expression data using empirical Bayes methods.
@@ -141,9 +219,15 @@ infusion mass spectrometry (DIMS) metabolomics workflow.
 \emph{Analytical and Bioanalytical Chemistry}, 405(15), 5147-5157.
 \doi{10.1007/s00216-013-6856-7}
 
-Jankevics, A., Lloyd, G.R., & Weber, R.J.M. (2025). \emph{pmp: Peak Matrix
-Processing and signal batch correction for metabolomics datasets}.
-R package. \doi{10.18129/B9.bioc.pmp}
+Vynck, M., Vangeenderhuysen, P., De Paepe, E., Nawrot, T., Plekhova, V., &
+Vanhaecke, L. (2026). Robust metabolomics data normalization across scales
+and experimental designs. \emph{Analytical Chemistry}, 98(24), 17627-17637.
+\doi{10.1021/acs.analchem.5c06841}
+
+Wood, S.N. (2011). Fast stable restricted maximum likelihood and marginal
+likelihood estimation of semiparametric generalized linear models.
+\emph{Journal of the Royal Statistical Society: Series B}, 73(1), 3-36.
+\doi{10.1111/j.1467-9868.2010.00749.x}
 }
 \seealso{
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}} for the full pipeline, \code{\link[=plot_beforeafter]{plot_beforeafter()}}
@@ -152,6 +236,7 @@ to inspect the correction along the injection order.
 Other preprocessing steps:
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
 \code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filterblank]{run_filterblank()}},
 \code{\link[=run_filtermissing]{run_filtermissing()}},
 \code{\link[=run_filtervariance]{run_filtervariance()}},
 \code{\link[=run_mvimpute]{run_mvimpute()}},

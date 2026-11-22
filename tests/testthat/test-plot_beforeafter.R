@@ -1,7 +1,6 @@
 plot_fixture <- function() {
-  before <- dims_clean(1:6)
-  after  <- run_driftBatchCorrect(before, dims_metadata, spline_smooth_param = 0.5,
-                                  verbose = FALSE)$data
+  before <- replace(dims_data[, 1:6], dims_data[, 1:6] == 0, NA)
+  after  <- run_driftBatchCorrect(before, dims_metadata, verbose = FALSE)$data
   list(before = before, after = after)
 }
 
@@ -19,13 +18,13 @@ test_that("plot_beforeafter random selection is reproducible and leaves RNG alon
   set.seed(5); before_rng <- runif(1)
   set.seed(5)
   expect_message(plot_beforeafter(pf$before, pf$after, dims_metadata, plot_what = NULL,
-                                  seed = 1), "Automatically selected 6")
+                                  seed = 1), "Automatically selected 4")
   expect_equal(runif(1), before_rng)
 })
 
 test_that("plot_beforeafter accepts a run_DIpreprocess result", {
-  res <- run_DIpreprocess(dims_data[, 1:30], dims_metadata, spline_smooth = 0.5,
-                          variance_percentile = 0, verbose = FALSE)
+  res <- run_DIpreprocess(dims_data[, 1:30], dims_metadata, variance_percentile = 0,
+                          verbose = FALSE)
   pdf(NULL); on.exit(dev.off())
   expect_s3_class(suppressMessages(plot_beforeafter(res, plot_what = "mz_0003")), "gtable")
 })
@@ -43,4 +42,18 @@ test_that("plot_beforeafter validates inputs", {
   expect_warning(suppressMessages(plot_beforeafter(pf$before, pf$after, dims_metadata,
                                                    plot_what = c("mz_0001", "ghost"))),
                  "not found")
+})
+
+test_that("plot sizes follow base_size and the returned plot prints", {
+  expect_equal(formals(plot_beforeafter)$base_size, 11)
+  expect_identical(formals(plot_beforeafter)$title_size, quote(base_size))
+  expect_null(formals(plot_beforeafter)$global_font_size)
+  pf <- plot_fixture()
+  pdf(NULL); on.exit(dev.off())
+  g <- plot_beforeafter(pf$before, pf$after, dims_metadata, plot_what = "mz_0001",
+                        base_size = 8)
+  expect_s3_class(g, "dimsprepr_plot")
+  expect_silent(print(g))
+  expect_error(plot_beforeafter(pf$before, pf$after, dims_metadata, plot_what = "mz_0001",
+                                title_size = -1), "positive")
 })

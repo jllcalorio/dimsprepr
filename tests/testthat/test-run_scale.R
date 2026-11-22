@@ -32,15 +32,15 @@ test_that("run_scale none returns unchanged data", {
   expect_equal(as.numeric(res$data), as.numeric(td$x))
 })
 
-test_that("run_scale group bug is fixed (levels(group_vec) not levels(group))", {
+test_that("run_scale reports the groups used by supervised methods", {
   td <- make_test_data()
   td$x[is.na(td$x)] <- 100
   res_svast <- run_scale(td$x, method = "svast",
                           metadata = td$metadata, group_col = "Group",
                           verbose = FALSE)
-  # Should correctly report group levels, not NULL
-  expect_true(!is.null(res_svast$parameters$group_col))
-  expect_true(length(res_svast$parameters$group_col) > 0)
+  expect_identical(res_svast$parameters$group_col, "Group")
+  expect_identical(res_svast$parameters$groups, sort(unique(td$metadata$Group)))
+  expect_error(run_scale(td$x, method = "ln", verbose = FALSE), "Unknown scaling")
 })
 
 test_that("run_scale vast works", {

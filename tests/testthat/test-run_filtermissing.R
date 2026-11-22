@@ -74,3 +74,35 @@ test_that("bundled data: almost-empty features are removed", {
   res <- run_filtermissing(dims_data, dims_metadata, verbose = FALSE)
   expect_true(all(c("mz_0078", "mz_0079", "mz_0080") %in% res$features_removed))
 })
+
+test_that("a feature observed in exactly 80% of a group is kept (80% rule)", {
+  x <- matrix(c(1, 1, 1, 1, NA), ncol = 1, dimnames = list(NULL, "F1"))
+  meta <- data.frame(Group = rep("A", 5))
+  expect_equal(run_filtermissing(x, meta, threshold = 0.2, verbose = FALSE)$n_features_after, 1L)
+})
+
+test_that("absent_threshold keeps mostly-missing features as zeros in that group", {
+  x <- cbind(drug = c(5, NA, NA, NA, NA, 4, 6, 5, 7, 8),
+             noise = c(1, NA, NA, 2, NA, NA, 3, NA, 4, NA))   # 60% missing in A and B
+  meta <- data.frame(Group = rep(c("A", "B"), each = 5))
+  res <- run_filtermissing(x, meta, absent_threshold = 0.7, verbose = FALSE)
+  expect_identical(res$features_absent, "drug")          # 80% missing in A
+  expect_identical(res$features_kept, "drug")            # noise: 60-80% missing
+  expect_equal(unname(res$data[1:5, "drug"]), c(5, 0, 0, 0, 0))
+  expect_equal(res$n_absent_zeros, 4L)
+  expect_error(run_filtermissing(x, meta, absent_threshold = 0.1), "between")
+})
+
+test_that("sample_iqr removes samples with abnormally high missingness", {
+  x <- dims_data
+  x["S02", -(1:5)] <- 0                                   # failed injection
+  res <- run_filtermissing(x, dims_metadata, sample_iqr = 3, verbose = FALSE)
+  expect_identical(res$samples_removed, "S02")
+  expect_equal(nrow(res$data), nrow(x) - 1L)
+  expect_identical(rownames(res$data), res$metadata$Sample)
+  expect_gt(res$sample_missing_rate[["S02"]], 0.9)
+  # off by default, and nothing flagged in clean data
+  expect_length(run_filtermissing(x, dims_metadata, verbose = FALSE)$samples_removed, 0L)
+  expect_length(run_filtermissing(dims_data, dims_metadata, sample_iqr = 3,
+                                  verbose = FALSE)$samples_removed, 0L)
+})

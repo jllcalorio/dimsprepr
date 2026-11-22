@@ -1,5 +1,5 @@
 # Shared test fixtures - lightweight, no external deps
-# ponytail: one fixture set, every test file reuses it
+# one fixture set, every test file reuses it
 
 make_test_data <- function(n_samples = 30, n_features = 20, n_qc = 6, seed = 7744) {
   set.seed(seed)

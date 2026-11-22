@@ -1,74 +1,71 @@
 #' Normalize Metabolomics Data
 #'
 #' @description
-#' Applies various normalization methods to account for dilution effects and
-#' sample-to-sample variation in metabolomics data.
+#' Divides each sample by a normalization factor to remove dilution effects
+#' and other unwanted sample-to-sample variation in overall concentration.
 #'
-#' @param x Matrix or data frame. Numeric data with samples in rows and features in columns.
+#' @param x Matrix or data frame. Non-negative intensities with samples in
+#'   rows and features in columns. Missing values are ignored when computing
+#'   the factors.
 #'   For `print()`, a `run_normalize` object.
-#' @param metadata Data frame. Sample metadata with number of rows equal to nrow(x).
+#' @param metadata Data frame. Sample metadata with `nrow(metadata) == nrow(x)`.
 #' @param method Character or numeric vector. Normalization method:
 #'   \itemize{
-#'     \item \code{"sum"}: Total sum normalization (divide each sample by its row sum)
-#'     \item \code{"median"}: Median normalization (divide each sample by its row median)
-#'     \item \code{"specific_factor"}: Divide by values from the \code{factor_col}
+#'     \item `"sum"`: total sum (divide each sample by its row sum)
+#'     \item `"median"`: divide each sample by its median
+#'     \item `"specific_factor"`: divide by the values in the `factor_col`
 #'       metadata column (e.g. osmolality or creatinine)
-#'     \item \code{"pqn_global"}: Probabilistic quotient normalization (PQN) with the
-#'       median spectrum of all samples as reference
-#'     \item \code{"pqn_reference"}: PQN with one sample (\code{ref_sample}) as reference
-#'     \item \code{"pqn_group"}: PQN with the median spectrum of the
-#'       \code{group_sample} samples (pooled QCs by default) as reference
-#'     \item \code{"pqn"}: PQN via [pmp::pqn_normalisation()] with the QC
-#'       samples as reference
-#'     \item \code{"quantile"}: Alias for \code{"pqn"}, kept for backward
-#'       compatibility. Note this is \emph{not} quantile normalization.
-#'     \item \code{"col_rel_abundance"}: Relative abundance per column (feature)
-#'     \item \code{"row_rel_abundance"}: Relative abundance per row (sample)
-#'     \item \code{"none"}: No normalization
-#'     \item Numeric vector: custom factors, one per non-QC sample
+#'     \item `"pqn_global"`: probabilistic quotient normalization (PQN) with
+#'       the reference spectrum computed from all samples
+#'     \item `"pqn_reference"`: PQN with one sample (`ref_sample`) as reference
+#'     \item `"pqn_group"`: PQN with the reference spectrum computed from the
+#'       `group_sample` samples (pooled QCs by default)
+#'     \item `"none"`: no normalization
+#'     \item a numeric vector: custom factors, one per non-QC sample
 #'   }
-#'   When \code{method} is a column name in \code{metadata}, that column is used
-#'   as normalization factors (equivalent to \code{"specific_factor"}).
-#' @param factor_col Character. Metadata column with normalization factors.
-#'   Default: "Normalization". Ignored if \code{method} is a metadata column name.
-#' @param ref_sample Character. Sample identifier (in \code{sample_id_col}) used
-#'   as reference for \code{"pqn_reference"}. Default: NULL.
-#' @param group_sample Character. Group label(s) whose median spectrum is the
-#'   reference for \code{"pqn_group"}. Matches either the collapsed QC label
-#'   \code{"QC"} (any of \code{qc_types}) or a raw label in \code{group_col}
-#'   such as \code{"SQC"}. Default: "QC".
+#'   When `method` is a column name in `metadata`, that column supplies the
+#'   factors (equivalent to `"specific_factor"`).
+#' @param factor_col Character. Metadata column with normalization factors for
+#'   `"specific_factor"`. Default: `"Normalization"`.
+#' @param ref_sample Character. Sample identifier (in `sample_id_col`) used as
+#'   reference for `"pqn_reference"`. Default: `NULL`.
+#' @param group_sample Character. Group label(s) whose samples form the
+#'   reference for `"pqn_group"`. Matches either the collapsed QC label `"QC"`
+#'   (any of `qc_types`) or a raw label in `group_col` such as `"SQC"`.
+#'   Default: `"QC"`.
 #' @param qc_normalize Character. How QC samples are scaled when sample factors
-#'   are supplied (numeric \code{method} or \code{"specific_factor"}), since QCs
-#'   usually have no factor of their own: \code{"mean"} or \code{"median"} of the
-#'   sample factors, or \code{"none"} (divide by 1). Default: "none".
-#' @param group_col Character. Column with group labels. Default: "Group".
-#' @param qc_types Character vector. QC group labels. Default: c("QC", "SQC", "EQC").
-#' @param reference_method Character. Reference method for PQN via pmp: "mean" or "median".
-#'   Default: "mean".
-#' @param sample_id_col Character. Column with sample identifiers. Default: "Sample".
-#' @param verbose Logical. Print progress. Default: TRUE.
+#'   are supplied (numeric `method` or `"specific_factor"`), since QCs usually
+#'   have no factor of their own: `"mean"` or `"median"` of the sample factors,
+#'   or `"none"` (divide by 1). Default: `"none"`.
+#' @param group_col Character. Column with group labels. Default: `"Group"`.
+#' @param qc_types Character vector. QC group labels.
+#'   Default: `c("QC", "SQC", "EQC")`.
+#' @param reference_method Character. How the PQN reference spectrum is formed
+#'   from its samples: `"median"` (default; Dieterle et al., 2006) or
+#'   `"mean"`.
+#' @param sample_id_col Character. Column with sample identifiers, used by
+#'   `"pqn_reference"`. Default: `"Sample"`.
+#' @param verbose Logical. Print progress messages. Default: `TRUE`.
 #'
 #' @return A list of class `"run_normalize"` containing:
-#'   \item{data}{Normalized data (same class as input `x`)}
+#'   \item{data}{Normalized data (same class as `x`).}
 #'   \item{normalization_factors}{Numeric vector with the factor each sample
-#'     was divided by}
-#'   \item{method_used}{Character describing method}
-#'   \item{parameters}{List of parameters}
+#'     was divided by.}
+#'   \item{method_used}{Character describing the method.}
+#'   \item{parameters}{List of parameters used.}
 #'
 #' @details
-#' Normalization removes unwanted sample-to-sample variation such as
-#' dilution, which is especially large in urine. Every method divides each
-#' sample (row) by one factor.
+#' Normalization removes unwanted variation in overall sample concentration,
+#' such as dilution, which is especially large in urine. Every method divides
+#' each sample (row) by one factor.
 #'
 #' PQN (Dieterle et al., 2006) computes, for each sample, the median of the
 #' feature-wise quotients between that sample and a reference spectrum. It is
 #' more robust than sum normalization when a few features change strongly.
-#' The \code{"pqn"} / \code{"quantile"} options delegate to
-#' [pmp::pqn_normalisation()] (Jankevics et al., 2025), falling back to
-#' \code{"sum"} with a warning if it fails.
+#' Quotients that are not finite (zero reference) are ignored.
 #'
-#' Missing values are ignored when computing factors. Any \code{Inf} created
-#' by a zero factor is replaced with \code{NA}.
+#' Missing values are ignored when computing factors. Any `Inf` created by a
+#' zero factor is replaced with `NA`.
 #'
 #' @author John Lennon L. Calorio
 #'
@@ -77,10 +74,6 @@
 #' quotient normalization as robust method to account for dilution of complex
 #' biological mixtures. Application in 1H NMR metabonomics.
 #' *Analytical Chemistry*, 78(13), 4281-4290. \doi{10.1021/ac051632c}
-#'
-#' Jankevics, A., Lloyd, G.R., & Weber, R.J.M. (2025). *pmp: Peak Matrix
-#' Processing and signal batch correction for metabolomics datasets*.
-#' R package. \doi{10.18129/B9.bioc.pmp}
 #'
 #' @family preprocessing steps
 #' @seealso [run_DIpreprocess()] for the full pipeline, [run_transform()] for
@@ -106,215 +99,115 @@
 run_normalize <- function(
     x,
     metadata,
-    method         = "median",
-    factor_col     = "Normalization",
-    ref_sample     = NULL,
-    group_sample   = "QC",
-    qc_normalize   = "none",
-    group_col      = "Group",
-    qc_types       = c("QC", "SQC", "EQC"),
-    reference_method = "mean",
-    sample_id_col  = "Sample",
-    verbose        = TRUE
+    method           = "median",
+    factor_col       = "Normalization",
+    ref_sample       = NULL,
+    group_sample     = "QC",
+    qc_normalize     = "none",
+    group_col        = "Group",
+    qc_types         = c("QC", "SQC", "EQC"),
+    reference_method = "median",
+    sample_id_col    = "Sample",
+    verbose          = TRUE
 ) {
 
   msg <- .msg(verbose)
 
   .validate_data_matrix(x)
   .validate_metadata(x, metadata)
+  qc_normalize     <- match.arg(qc_normalize, c("none", "mean", "median"))
+  reference_method <- match.arg(reference_method, c("median", "mean"))
 
   mp <- .as_matrix_preserve(x)
   x_matrix <- mp$mat
-  qc_normalize <- match.arg(qc_normalize, c("none", "mean", "median"))
 
-  # Check if method is a column name in metadata (auto-detect specific_factor)
+  # A metadata column name as method means "use that column as factors"
   if (is.character(method) && length(method) == 1L && method %in% colnames(metadata)) {
     factor_col <- method
     method <- "specific_factor"
   }
+  if (!is.character(method) && !is.numeric(method))
+    stop("'method' must be a character string or a numeric vector.", call. = FALSE)
   if (is.character(method) &&
       (length(method) != 1L || !tolower(method) %in% .normalize_methods))
     stop("Unknown normalization method '", paste(method, collapse = ", "),
          "'. Supported: ", paste(.normalize_methods, collapse = ", "),
          ", a numeric vector of factors, or a metadata column name.", call. = FALSE)
-  if (!is.character(method) && !is.numeric(method))
-    stop("'method' must be a character string or a numeric vector.", call. = FALSE)
+  method_lc <- if (is.character(method)) tolower(method) else "custom"
 
-  # Collapse QC types
   if (group_col %in% colnames(metadata)) {
     metadata <- .add_group_collapsed(metadata, group_col, qc_types, "QC")
-  } else if (is.character(method) && tolower(method) %in% c("pqn_group", "pqn", "quantile")) {
-    stop(sprintf("'%s' column required in metadata for PQN methods.", group_col), call. = FALSE)
+  } else if (method_lc == "pqn_group") {
+    stop(sprintf("'%s' column required in metadata for pqn_group.", group_col), call. = FALSE)
   } else {
     metadata$Group_ <- "Sample"
   }
+  qc <- metadata$Group_ == "QC"
 
-  qc_indices     <- metadata$Group_ == "QC"
-  non_qc_indices <- !qc_indices
+  msg(sprintf("Applying '%s' normalization...", if (method_lc == "custom") "custom factors" else method_lc))
 
-  # Initialize all_factors before switch to avoid scope issues
-  all_factors <- rep(NA_real_, nrow(x_matrix))
+  # PQN: per-sample median quotient to a reference spectrum
+  .pqn <- function(ref_rows) {
+    ref_x <- x_matrix[ref_rows, , drop = FALSE]
+    ref <- if (reference_method == "median") matrixStats::colMedians(ref_x, na.rm = TRUE) else
+      colMeans(ref_x, na.rm = TRUE)
+    q <- sweep(x_matrix, 2, ref, "/")
+    q[!is.finite(q)] <- NA
+    matrixStats::rowMedians(q, na.rm = TRUE)
+  }
+  # Sample factors for non-QC rows; QC rows get mean/median/1 per qc_normalize
+  .with_qc_factor <- function(f_non_qc) {
+    f <- numeric(nrow(x_matrix))
+    f[!qc] <- f_non_qc
+    f[qc] <- switch(qc_normalize,
+                    mean   = mean(f_non_qc, na.rm = TRUE),
+                    median = stats::median(f_non_qc, na.rm = TRUE),
+                    none   = 1)
+    f
+  }
 
-  msg(sprintf("Applying '%s' normalization...",
-              if (is.numeric(method)) "custom factors" else method))
-
-  if (is.numeric(method)) {
-
-    n_non_qc <- sum(non_qc_indices)
-    if (length(method) != n_non_qc)
-      stop(sprintf("Custom factors must have length %d (non-QC samples), got %d.",
-                   n_non_qc, length(method)), call. = FALSE)
-
-    norm_factors <- method
-    x_matrix[non_qc_indices, ] <- x_matrix[non_qc_indices, ] / norm_factors
-
-    qc_factor <- switch(qc_normalize,
-                        "mean"   = mean(norm_factors, na.rm = TRUE),
-                        "median" = stats::median(norm_factors, na.rm = TRUE),
-                        1)
-    x_matrix[qc_indices, ] <- x_matrix[qc_indices, ] / qc_factor
-
-    method_description <- "Custom normalization factors"
-    all_factors[non_qc_indices] <- norm_factors
-    all_factors[qc_indices] <- qc_factor
-
-  } else {
-
-    method_lc <- tolower(method)
-    # Alias: "quantile" -> "pqn" (both use pmp::pqn_normalisation)
-    if (method_lc == "quantile") method_lc <- "pqn"
-
-    # ponytail: avoid switch()-as-expr scope issues with <<- inside branches.
-    # Set x_matrix and all_factors directly in each branch.
-    if (method_lc == "none") {
-      msg("No normalization applied.")
-      all_factors <- rep(1, nrow(x_matrix))
-
-    } else if (method_lc == "sum") {
-      msg("Normalizing by total sum...")
-      row_sums <- matrixStats::rowSums2(x_matrix, na.rm = TRUE)
-      all_factors <- row_sums
-      x_matrix <- x_matrix / row_sums
-
-    } else if (method_lc == "median") {
-      msg("Normalizing by median...")
-      row_medians <- matrixStats::rowMedians(x_matrix, na.rm = TRUE)
-      all_factors <- row_medians
-      x_matrix <- x_matrix / row_medians
-
-    } else if (method_lc == "specific_factor") {
+  factors <- switch(
+    method_lc,
+    custom = {
+      if (length(method) != sum(!qc))
+        stop(sprintf("Custom factors must have length %d (non-QC samples), got %d.",
+                     sum(!qc), length(method)), call. = FALSE)
+      .with_qc_factor(method)
+    },
+    none   = rep(1, nrow(x_matrix)),
+    sum    = matrixStats::rowSums2(x_matrix, na.rm = TRUE),
+    median = matrixStats::rowMedians(x_matrix, na.rm = TRUE),
+    specific_factor = {
       .require_col(metadata, factor_col)
-      factor_values <- as.numeric(metadata[[factor_col]][non_qc_indices])
-
-      if (all(is.na(factor_values) | factor_values == 0)) {
+      f <- as.numeric(metadata[[factor_col]][!qc])
+      if (all(is.na(f) | f == 0)) {
         warning("All normalization factors are NA or 0. Using 'sum' instead.", call. = FALSE)
-        row_sums <- matrixStats::rowSums2(x_matrix, na.rm = TRUE)
-        all_factors <- row_sums
-        x_matrix <- x_matrix / row_sums
+        method_lc <- "sum (fallback from specific_factor)"
+        matrixStats::rowSums2(x_matrix, na.rm = TRUE)
       } else {
-        msg(sprintf("Normalizing using factors from '%s'...", factor_col))
-        x_matrix[non_qc_indices, ] <- x_matrix[non_qc_indices, ] / factor_values
-
-        qc_factor <- switch(qc_normalize,
-                            "mean"   = mean(factor_values, na.rm = TRUE),
-                            "median" = stats::median(factor_values, na.rm = TRUE),
-                            1)
-        x_matrix[qc_indices, ] <- x_matrix[qc_indices, ] / qc_factor
-
-        all_factors[non_qc_indices] <- factor_values
-        all_factors[qc_indices] <- qc_factor
+        .with_qc_factor(f)
       }
-
-    } else if (method_lc == "pqn_global") {
-      msg("Applying PQN (global median reference)...")
-      reference_spectrum <- matrixStats::colMedians(x_matrix, na.rm = TRUE)
-      quotients <- sweep(x_matrix, 2, reference_spectrum, "/")
-      median_quotients <- matrixStats::rowMedians(quotients, na.rm = TRUE)
-      all_factors <- median_quotients
-      x_matrix <- x_matrix / median_quotients
-
-    } else if (method_lc == "pqn_reference") {
+    },
+    pqn_global = .pqn(seq_len(nrow(x_matrix))),
+    pqn_reference = {
       if (is.null(ref_sample))
         stop("'ref_sample' must be specified for pqn_reference.", call. = FALSE)
       .require_col(metadata, sample_id_col)
       ref_idx <- which(metadata[[sample_id_col]] == ref_sample)
-      if (length(ref_idx) == 0)
+      if (length(ref_idx) == 0L)
         stop(sprintf("Reference sample '%s' not found.", ref_sample), call. = FALSE)
-
-      msg(sprintf("Applying PQN (reference: %s)...", ref_sample))
-      reference_spectrum <- as.numeric(x_matrix[ref_idx[1], ])
-      quotients <- sweep(x_matrix, 2, reference_spectrum, "/")
-      median_quotients <- matrixStats::rowMedians(quotients, na.rm = TRUE)
-      all_factors <- median_quotients
-      x_matrix <- x_matrix / median_quotients
-
-    } else if (method_lc == "pqn_group") {
-      # group_sample may be the collapsed "QC" label or one raw label (e.g. "SQC")
-      pooled_indices <- metadata$Group_ %in% group_sample |
-        metadata[[group_col]] %in% group_sample
-      if (sum(pooled_indices) == 0)
+      .pqn(ref_idx[1])
+    },
+    pqn_group = {
+      ref_rows <- metadata$Group_ %in% group_sample | metadata[[group_col]] %in% group_sample
+      if (!any(ref_rows))
         stop(sprintf("No '%s' samples found in '%s' for group PQN.",
                      paste(group_sample, collapse = ", "), group_col), call. = FALSE)
-
-      msg(sprintf("Applying PQN (group: %s)...", group_sample))
-      reference_spectrum <- matrixStats::colMedians(
-        x_matrix[pooled_indices, , drop = FALSE], na.rm = TRUE
-      )
-      quotients <- sweep(x_matrix, 2, reference_spectrum, "/")
-      median_quotients <- matrixStats::rowMedians(quotients, na.rm = TRUE)
-      all_factors <- median_quotients
-      x_matrix <- x_matrix / median_quotients
-
-    } else if (method_lc == "pqn") {
-      if (!requireNamespace("pmp", quietly = TRUE))
-        stop("Package 'pmp' required. Install with: BiocManager::install('pmp')", call. = FALSE)
-
-      tryCatch({
-        msg("Applying PQN normalization via pmp...")
-        normalized <- pmp::pqn_normalisation(
-          t(x_matrix),
-          classes    = metadata$Group_,
-          qc_label   = "QC",
-          ref_mean   = NULL,
-          qc_frac    = 0,
-          sample_frac = 0,
-          ref_method = reference_method
-        )
-        all_factors <- matrixStats::rowMedians(x_matrix / t(normalized), na.rm = TRUE)
-        x_matrix <- t(normalized)
-      }, error = function(e) {
-        warning("PQN normalization failed: ", e$message, ". Using 'sum' instead.", call. = FALSE)
-        row_sums <- matrixStats::rowSums2(x_matrix, na.rm = TRUE)
-        all_factors <<- row_sums
-        x_matrix <<- x_matrix / row_sums
-      })
-
-    } else if (method_lc == "col_rel_abundance") {
-      msg("Normalizing by column relative abundance...")
-      col_sums <- matrixStats::colSums2(x_matrix, na.rm = TRUE)
-      if (any(col_sums == 0))
-        warning("Columns sum to 0; relative abundance will produce NaN.", call. = FALSE)
-      all_factors <- col_sums
-      x_matrix <- sweep(x_matrix, 2, col_sums, "/")
-
-    } else if (method_lc == "row_rel_abundance") {
-      msg("Normalizing by row relative abundance...")
-      row_sums <- matrixStats::rowSums2(x_matrix, na.rm = TRUE)
-      if (any(row_sums == 0))
-        warning("Rows sum to 0; relative abundance will produce NaN.", call. = FALSE)
-      all_factors <- row_sums
-      x_matrix <- x_matrix / row_sums
-
+      .pqn(ref_rows)
     }
+  )
 
-    method_description <- if (method_lc == "pqn" && tolower(method) == "quantile") {
-      "quantile (pqn via pmp)"
-    } else {
-      method_lc
-    }
-  }
-
-  # Handle Inf values
+  x_matrix <- x_matrix / factors
   if (any(is.infinite(x_matrix))) {
     msg("Warning: Normalization produced Inf values. Replacing with NA.")
     x_matrix[is.infinite(x_matrix)] <- NA
@@ -325,8 +218,8 @@ run_normalize <- function(
   structure(
     list(
       data                  = .restore_class(x_matrix, mp$was_matrix),
-      normalization_factors = all_factors,
-      method_used           = method_description,
+      normalization_factors = factors,
+      method_used           = method_lc,
       parameters = list(
         method           = if (is.numeric(method)) "custom" else method,
         factor_col       = factor_col,

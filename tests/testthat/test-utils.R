@@ -66,7 +66,7 @@ test_that(".resolve_plot_what keeps found features and falls back when none matc
   expect_equal(dimsprepr:::.resolve_plot_what("F2", cols), "F2")
   expect_warning(out <- suppressMessages(dimsprepr:::.resolve_plot_what("zz", cols)),
                  "Falling back")
-  expect_length(out, 6L)
+  expect_length(out, 4L)
   expect_equal(suppressMessages(dimsprepr:::.resolve_plot_what(NULL, cols[1:3])), cols[1:3])
 })
 

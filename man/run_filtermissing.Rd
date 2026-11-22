@@ -15,123 +15,136 @@ run_filtermissing(
   group_col = "Group",
   qc_types = c("QC", "SQC", "EQC"),
   zero_as_missing = TRUE,
+  absent_threshold = NULL,
+  sample_iqr = NULL,
   verbose = TRUE
 )
 
 \method{print}{run_filtermissing}(x, ...)
 }
 \arguments{
-\item{x}{Matrix or data frame. Numeric data with samples in rows and features in columns.
-Missing values should be represented as NA. Zero values can optionally be treated
-as missing via the \code{zero_as_missing} parameter.
+\item{x}{Matrix or data frame. Numeric data with samples in rows and
+features in columns. Missing values should be \code{NA}; zeros can be treated
+as missing via \code{zero_as_missing}.
 For \code{print()}, a \code{run_filtermissing} object.}
 
-\item{metadata}{Data frame. Sample metadata with number of rows equal to nrow(x).
-Must contain a column specified by \code{group_col} when \code{filter_by_group = TRUE}.}
+\item{metadata}{Data frame. Sample metadata with \code{nrow(metadata) == nrow(x)}.
+Must contain \code{group_col} when \code{filter_by_group = TRUE} or when QC samples
+are to be excluded.}
 
-\item{threshold}{Numeric. Maximum proportion of missing values allowed (0-1).
-Features with missing proportion >= threshold are removed. Default: 0.2 (20\%).}
+\item{threshold}{Numeric in [0, 1]. Maximum proportion of missing values
+allowed. Features with a missing proportion above \code{threshold} are
+removed. Default: \code{0.2} (the 80\% rule).}
 
-\item{filter_by_group}{Logical. If TRUE, assess missingness within each group separately.
-A feature is kept if it passes the threshold in at least one group. Default: TRUE.}
+\item{filter_by_group}{Logical. If \code{TRUE} (default), assess missingness
+within each group separately.}
 
 \item{any_group}{Logical. Only used when \code{filter_by_group = TRUE}. If \code{TRUE}
-(default), a feature is retained if its missingness is below the \code{threshold}
-in \strong{any} one group. This implements the "Modified 80\% Rule" (Yang et al., 2015).
-If \code{FALSE}, the feature must satisfy the threshold in \strong{all} groups.}
+(default), a feature is kept if it passes \code{threshold} in at least one
+group (the "modified 80\% rule"; Yang et al., 2015). If \code{FALSE}, it must
+pass in all groups.}
 
-\item{include_QC}{Logical. If TRUE, include QC samples in missingness calculation.
-Default: FALSE (QC samples are excluded from assessment).}
+\item{include_QC}{Logical. If \code{TRUE}, include QC samples in the
+missingness assessment. Default: \code{FALSE}.}
 
-\item{group_col}{Character. Name of the column in \code{metadata} containing group information.
-Required when \code{filter_by_group = TRUE}. Default: "Group".}
+\item{group_col}{Character. Column in \code{metadata} with group labels.
+Default: \code{"Group"}.}
 
-\item{qc_types}{Character vector. Group labels that identify QC samples. These samples
-are excluded from missingness calculation when \code{include_QC = FALSE}. Default: c("QC", "SQC", "EQC").}
+\item{qc_types}{Character vector. Group labels that identify QC samples.
+Default: \code{c("QC", "SQC", "EQC")}.}
 
-\item{zero_as_missing}{Logical. If TRUE, treat zero values as missing (NA) before
-applying the filter. This is common in metabolomics where zeros often represent
-values below detection limit rather than true zeros. Default: TRUE.}
+\item{zero_as_missing}{Logical. If \code{TRUE} (default), treat zeros as missing
+(\code{NA}) before filtering.}
 
-\item{verbose}{Logical. Print progress messages. Default: TRUE.}
+\item{absent_threshold}{Numeric in (\code{threshold}, 1), or \code{NULL} (default,
+off). Within each assessed group, a feature missing in more than this
+proportion of samples is considered \emph{truly absent} there: its
+missing values in that group are set to 0 instead of being left for
+imputation, and the feature is kept even if it fails \code{threshold}.
+QComics uses \code{0.7} (González-Domínguez et al., 2024).}
+
+\item{sample_iqr}{Numeric or \code{NULL} (default, off). QComics sample check:
+within each group (QC samples included), a sample whose proportion of
+missing values over the commonly detected features (those passing the
+feature filter) exceeds the group's third quartile by more than
+\code{sample_iqr} times the interquartile range (taken as at least 0.05) is
+removed as a likely failed or low-signal injection, and the feature
+filter is recomputed without it. \code{3} is Tukey's far-out rule.}
+
+\item{verbose}{Logical. Print progress messages. Default: \code{TRUE}.}
 
 \item{...}{Ignored.}
 }
 \value{
 A list of class \code{"run_filtermissing"} containing:
-\item{data}{Matrix or data frame of filtered data (same class as input \code{x})}
-\item{features_removed}{Character vector of removed feature names}
-\item{features_kept}{Character vector of retained feature names}
-\item{n_features_before}{Integer. Number of features before filtering}
-\item{n_features_after}{Integer. Number of features after filtering}
-\item{n_features_removed}{Integer. Number of features removed}
-\item{n_zeros_converted}{Integer. Number of zero values converted to NA (if applicable)}
-\item{parameters}{List of parameters used}
-\item{missingness_summary}{Data frame with per-feature missingness statistics}
+\item{data}{Filtered data (same class as \code{x}), without the samples in
+\code{samples_removed}.}
+\item{metadata}{\code{metadata} without the samples in \code{samples_removed}.}
+\item{samples_removed}{Samples removed by the \code{sample_iqr} check.}
+\item{features_removed, features_kept}{Character vectors of feature names.}
+\item{features_absent}{Features kept as truly absent in at least one group
+(empty unless \code{absent_threshold} is set).}
+\item{n_features_before, n_features_after, n_features_removed}{Integers.}
+\item{n_zeros_converted}{Number of zeros converted to \code{NA}.}
+\item{n_absent_zeros}{Number of missing values set to 0 as truly absent.}
+\item{sample_missing_rate}{Proportion of missing values per input sample
+over the commonly detected features, the quantity checked by
+\code{sample_iqr}.}
+\item{missingness_summary}{Data frame with the per-feature missing
+proportion in each assessed group (one \code{Missingness} column in global
+mode), and logical \code{Absent} and \code{Kept} columns.}
+\item{parameters}{List of parameters used.}
 }
 \description{
-Removes features (columns) that exceed a specified missing value threshold.
-Can assess missingness globally or by group, with optional inclusion of QC samples.
-Supports treating zero values as missing, which is common in metabolomics data.
+Removes features (columns) whose proportion of missing values exceeds a
+threshold, assessed globally or within each sample group, optionally
+including QC samples. Zeros can be treated as missing, as is usual for
+below-detection values in metabolomics. Optionally, features that are
+mostly missing in a group are treated as truly absent there and kept with
+zeros, following the QComics guidelines.
 }
 \details{
-This function filters features based on the proportion of missing values (NAs).
+\strong{Zeros.} In metabolomics data, zeros usually mean that a peak was below
+the detection limit, failed integration, or was not detected. With
+\code{zero_as_missing = TRUE} (default) they are converted to \code{NA} first. Set it
+to \code{FALSE} only if zeros were already converted, carry quantitative
+meaning, or the data contain negative values.
 
-\strong{Zero values treated as missing}
-
-In metabolomics data, zero values often represent one of the following:
+\strong{Filtering modes.}
 \itemize{
-\item Peak intensities below the detection limit
-\item Failed peak integration
-\item Metabolites not detected in the sample
+\item Global (\code{filter_by_group = FALSE}): missingness over all assessed
+samples. With \code{threshold = 0.2} this is the 80\% rule of Smilde et al.
+(2005): a feature is kept if it is observed in at least 80\% of samples.
+\item Group-wise (\code{filter_by_group = TRUE}): missingness within each group.
+With \code{any_group = TRUE} this is the modified 80\% rule (Yang et al.,
+2015), which keeps group-specific features; QComics recommends the same
+rule (remove features with more than 20\% missing in all groups).
 }
 
-When \code{zero_as_missing = TRUE} (default), zero values are converted to
-missing values before filtering. This is recommended for most untargeted
-metabolomics datasets.
+\strong{QC samples.} With \code{include_QC = FALSE}, samples labelled with
+\code{qc_types} are excluded from the assessment, as their missingness pattern
+differs from that of biological samples.
 
-Set \code{zero_as_missing = FALSE} only if one of the following is true:
-\itemize{
-\item Your preprocessing pipeline already converted zeros to NA
-\item Zero represents a true biological absence with quantitative meaning
-\item Your dataset contains negative values (for example after baseline correction)
-}
+\strong{Truly absent data (QComics).} Plain filtering removes features that are
+genuinely present in only some individuals, such as drugs or dietary
+compounds. Following González-Domínguez et al. (2024), when
+\code{absent_threshold} is set, a feature missing in more than that proportion
+of a group is taken to be absent in that group (real zeros) rather than
+missing for analytical reasons. Downstream, prefer a transformation that
+handles zeros (e.g. \code{"glog"}), since a log transform then needs a shift.
 
-\strong{Filtering strategies}
-
-Two filtering modes are available:
-
-\itemize{
-\item \strong{Global filtering} (\code{filter_by_group = FALSE}):
-Missingness is calculated across all eligible samples. Features with
-missing proportion greater than or equal to \code{threshold} are removed.
-When threshold = 0.20, essentially, you are implementing the procedure of
-Smilde et al. (2005), the \verb{80\% rule}, i.e., a variable will be kept if it
-has a non-zero value for at least 80\% of all samples.
-
-\item \strong{Group-wise filtering} (\code{filter_by_group = TRUE}):
-Missingness is calculated separately within each group. By default
-(\code{any_group = TRUE}), a feature is retained if it satisfies the
-threshold in at least one group. This implements the "Modified 80\% Rule"
-(Yang et al., 2015), which is less stringent and helps preserve
-group-specific features. Set \code{any_group = FALSE} to require that the
-threshold is met across all groups.
-}
-
-\strong{QC sample handling}
-
-When \code{include_QC = FALSE}, samples whose group labels match
-\code{qc_types} are excluded from missingness calculations in both modes
-(global filtering needs \code{group_col} in \code{metadata} for this; if
-it is absent, all samples are used). This is recommended because QC
-samples often exhibit different missingness patterns compared with
-biological samples.
+\strong{Samples with low detection rates (QComics).} QComics also recommends
+checking the detection rate of every sample, by group, and discarding
+samples with abnormally low detection rates, such as failed injections.
+Their few remaining values are unreliable, and normalization would
+inflate them. \code{sample_iqr} applies this check, using the far-out rule that
+QComics applies to quality markers.
 }
 \examples{
 data(dims_data)
 data(dims_metadata)
 
-# Modified 80\% rule: keep features present in >= 80\% of any one group
+# Modified 80\% rule: keep features observed in >= 80\% of any one group
 res <- run_filtermissing(dims_data, dims_metadata, threshold = 0.2)
 res
 res$features_removed
@@ -139,23 +152,34 @@ res$features_removed
 # Classic 80\% rule across all non-QC samples
 run_filtermissing(dims_data, dims_metadata, filter_by_group = FALSE,
                   verbose = FALSE)
+
+# QComics: keep mostly-absent features as zeros instead of removing them
+run_filtermissing(dims_data, dims_metadata, absent_threshold = 0.7,
+                  verbose = FALSE)$features_absent
 }
 \references{
-Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control, Batch Correction,
-Exploration & Data Cleaning (Version 2.1). Zenodo. \doi{10.5281/zenodo.16824822}.
-Retrieved from \url{https://github.com/broadhurstdavid/QC-MXP}.
+Broadhurst, D.I. (2025). QC:MXP Repeat Injection based Quality Control,
+Batch Correction, Exploration & Data Cleaning (Version 2.1). Zenodo.
+\doi{10.5281/zenodo.16824822}. Retrieved from
+\url{https://github.com/broadhurstdavid/QC-MXP}.
 
-Smilde, A. K., van der Werf, M. J., Bijlsma, S., van der Werff-van der Vat, B. J.,
-& Jellema, R. H. (2005). Fusion of mass spectrometry-based metabolomics data.
-Anal. Chem. 77, 6729-6736. \doi{10.1021/ac051080y}.
+González-Domínguez, A., Estanyol-Torres, N., Brunius, C., Landberg, R., &
+González-Domínguez, R. (2024). QComics: Recommendations and guidelines for
+robust, easily implementable and reportable quality control of
+metabolomics data. \emph{Analytical Chemistry}, 96(3), 1064-1072.
+\doi{10.1021/acs.analchem.3c03660}
+
+Smilde, A.K., van der Werf, M.J., Bijlsma, S., van der Werff-van der Vat,
+B.J., & Jellema, R.H. (2005). Fusion of mass spectrometry-based metabolomics
+data. \emph{Analytical Chemistry}, 77(20), 6729-6736. \doi{10.1021/ac051080y}
 
 Wei, R., Wang, J., Su, M., Jia, E., Chen, S., Chen, T., & Ni, Y. (2018).
-Missing Value Imputation Approach for Mass Spectrometry-based Metabolomics Data.
-Scientific Reports, 8(1), 663. \doi{10.1038/s41598-017-19120-0}
+Missing value imputation approach for mass spectrometry-based metabolomics
+data. \emph{Scientific Reports}, 8(1), 663. \doi{10.1038/s41598-017-19120-0}
 
-Yang J, Zhao X, Lu X, Lin X and Xu G (2015) A data preprocessing strategy for
-metabolomics to reduce the mask effect in data analysis. Front. Mol. Biosci. 2:4.
-\doi{10.3389/fmolb.2015.00004}
+Yang, J., Zhao, X., Lu, X., Lin, X., & Xu, G. (2015). A data preprocessing
+strategy for metabolomics to reduce the mask effect in data analysis.
+\emph{Frontiers in Molecular Biosciences}, 2, 4. \doi{10.3389/fmolb.2015.00004}
 }
 \seealso{
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}} for the full pipeline, \code{\link[=run_mvimpute]{run_mvimpute()}} for
@@ -165,6 +189,7 @@ Other preprocessing steps:
 \code{\link[=run_DIpreprocess]{run_DIpreprocess()}},
 \code{\link[=run_driftBatchCorrect]{run_driftBatchCorrect()}},
 \code{\link[=run_filterRSD]{run_filterRSD()}},
+\code{\link[=run_filterblank]{run_filterblank()}},
 \code{\link[=run_filtervariance]{run_filtervariance()}},
 \code{\link[=run_mvimpute]{run_mvimpute()}},
 \code{\link[=run_normalize]{run_normalize()}},

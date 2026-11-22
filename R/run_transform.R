@@ -8,6 +8,7 @@
 #'   For `print()`, a `run_transform` object.
 #' @param method Character. Transformation method to apply. Options:
 #'   \itemize{
+#'     \item \code{"ln"}: Natural log transformation
 #'     \item \code{"log2"}: Log base 2 transformation
 #'     \item \code{"log10"}: Log base 10 transformation
 #'     \item \code{"sqrt"}: Square root transformation
@@ -34,7 +35,7 @@
 #' Transformations reduce heteroscedasticity and right skew so that fold
 #' changes become additive (van den Berg et al., 2006).
 #'
-#' **log2/log10**: Logarithmic compression. If the data contain non-positive
+#' **ln/log2/log10**: Logarithmic compression. If the data contain non-positive
 #' values, a global shift of `abs(min(x)) + 1` is added first (reported in
 #' `shift_applied`).
 #'
@@ -97,11 +98,9 @@
 #' res
 #' range(res$data)
 #'
-#' # glog uses QC samples, so it needs metadata
-#' \donttest{
-#' data(dims_metadata)
-#' run_transform(x, method = "glog", metadata = dims_metadata, verbose = FALSE)
-#' }
+#' # glog optimises its parameter on the QC samples, so it needs metadata
+#' # (and the pmp package):
+#' # run_transform(x, method = "glog", metadata = dims_metadata)
 run_transform <- function(
     x,
     method    = "log10",
@@ -128,7 +127,7 @@ run_transform <- function(
   msg(sprintf("Applying '%s' transformation...", method))
 
   # Shift data so its minimum is >= 0 (strict = FALSE) or >= 1 (strict = TRUE).
-  # ponytail: one global shift for the whole matrix, not per feature.
+  # one global shift for the whole matrix, not per feature.
   .shift <- function(strict) {
     min_val <- min(x_matrix, na.rm = TRUE)
     if (if (strict) min_val <= 0 else min_val < 0) {
@@ -149,6 +148,7 @@ run_transform <- function(
   x_transformed <- switch(
     method,
     "none"  = x_matrix,
+    "ln"    = log(.shift(TRUE)),
     "log2"  = log2(.shift(TRUE)),
     "log10" = log10(.shift(TRUE)),
     "sqrt"  = sqrt(.shift(FALSE)),
@@ -173,16 +173,22 @@ run_transform <- function(
       }, error = .log10_fallback)
     },
     "glog" = {
+      if (!requireNamespace("pmp", quietly = TRUE))
+        stop("Package 'pmp' is required for glog. Install with: BiocManager::install('pmp')",
+             call. = FALSE)
       if (is.null(metadata))
         stop("'metadata' is required for glog transformation.", call. = FALSE)
       .validate_metadata(x, metadata)
       .require_col(metadata, group_col)
       metadata <- .add_group_collapsed(metadata, group_col, qc_types, "QC")
-      tryCatch(
-        t(pmp::glog_transformation(t(x_matrix), classes = metadata$Group_,
-                                   qc_label = "QC")),
-        error = .log10_fallback
-      )
+      tryCatch({
+        # pmp reports lambda problems with cat(); keep that out of quiet runs
+        out <- NULL
+        printed <- utils::capture.output(out <- pmp::glog_transformation(
+          t(x_matrix), classes = metadata$Group_, qc_label = "QC"))
+        if (verbose && length(printed)) message(paste(printed, collapse = "\n"))
+        t(out)
+      }, error = .log10_fallback)
     }
   )
 

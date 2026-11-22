@@ -18,126 +18,104 @@ plot_beforeafter(
   x_label = "Before",
   y_label = "After",
   log_transform = TRUE,
-  point_size = 2,
+  point_size = 1.5,
   point_alpha = 0.7,
   plot_cols = NULL,
   theme = "nature",
-  base_size = 15,
+  base_size = 11,
   font_family = "sans",
   seed = 123,
-  global_font_size = NULL,
-  title_size = NULL,
-  subtitle_size = NULL,
-  xlab_size = NULL,
-  ylab_size = NULL
+  title_size = base_size,
+  subtitle_size = base_size * 1.2,
+  xlab_size = base_size,
+  ylab_size = base_size
 )
 }
 \arguments{
-\item{x}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing
-the data \emph{before} the transformation. Rows are samples; columns are
-features. Column names may contain special characters. Alternatively, a
-\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} result: \code{x} then becomes its imputed data
-(\code{$data_imputed}), \code{y} its drift/batch-corrected data
-(\code{$data_corrected}), and \code{metadata} its standardized metadata,
-so \code{y} and \code{metadata} can be omitted.}
+\item{x}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing the data
+\emph{before} the transformation. Rows are samples; columns are features.
+Column names may contain special characters. Alternatively, a
+\code{\link[=run_DIpreprocess]{run_DIpreprocess()}} result: \code{x} then becomes its missing-filtered data
+(\verb{$data_missing_filtered}), \code{y} its drift/batch-corrected data
+(\verb{$data_corrected}), and \code{metadata} its standardized metadata, so \code{y} and
+\code{metadata} can be omitted.}
 
-\item{y}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing
-the data \emph{after} the transformation. Must have the same dimensions
-and column names as \code{x}. Ignored when \code{x} is a
-\code{run_DIpreprocess} result.}
+\item{y}{A \code{data.frame}, \code{tibble}, or \code{matrix} representing the data
+\emph{after} the transformation. Must have the same dimensions and column
+names as \code{x}. Ignored when \code{x} is a \code{run_DIpreprocess} result.}
 
-\item{metadata}{A \code{data.frame} containing sample-level metadata shared
-by both \code{x} and \code{y}. Must have the same number of rows as
-\code{x} and \code{y}. Optional when \code{x} is a
-\code{run_DIpreprocess} result.}
+\item{metadata}{A \code{data.frame} containing sample-level metadata shared by
+both \code{x} and \code{y}. Must have the same number of rows as \code{x} and \code{y}.
+Optional when \code{x} is a \code{run_DIpreprocess} result.}
 
-\item{plot_what}{Character vector or \code{NULL}. Column names from \code{x} to be plotted.
-If \code{NULL} (default), the function randomly selects up to 6 features.
-If specific features are provided but not found, a warning is issued and they
-are skipped. If none of the provided features are found, the function falls
-back to random selection.}
+\item{plot_what}{Character vector or \code{NULL}. Column names of \code{x} to plot.
+If \code{NULL} (default), up to 4 features are selected at random. Features
+not found are skipped with a warning; if none is found, the function
+falls back to random selection.}
 
-\item{col_injection}{Character. Name of the column in \code{metadata}
-containing the injection sequence (numeric order of runs).
-Default is \code{"InjectionSequence"}. If \code{run_DIpreprocess} class,
-value is automatically taken from \verb{$parameters$injection_col}.}
+\item{col_injection}{Character. Column in \code{metadata} with the injection
+sequence (numeric run order). Default: \code{"InjectionSequence"} (always used
+for a \code{run_DIpreprocess} input).}
 
-\item{col_batch}{Character. Name of the column in \code{metadata}
-containing batch identifiers. Default is \code{"Batch"}. If \code{run_DIpreprocess} class,
-value is automatically taken from \verb{$parameters$batch_col}.}
+\item{col_batch}{Character. Column in \code{metadata} with batch identifiers.
+Default: \code{"Batch"} (always used for a \code{run_DIpreprocess} input).}
 
-\item{col_group}{Character. Name of the column in \code{metadata}
-containing sample group labels (e.g., \code{"QC"}, \code{"Sample"}).
-Default is \code{"Group"}. If \code{run_DIpreprocess} class,
-value is automatically taken from \verb{$parameters$group_col}.}
+\item{col_group}{Character. Column in \code{metadata} with sample group labels.
+Default: \code{"Group"} (always used for a \code{run_DIpreprocess} input).}
 
-\item{col_qc_label}{Character vector. The value(s) in the \code{col_group} column
-that identifies the reference group for LOESS trend fitting (typically
-QC samples). Can be a vector like \code{c("SQC", "EQC")}. If \code{NULL},
-no LOESS line is drawn. Default is \code{c("QC", "SQC", "EQC")}. If \code{run_DIpreprocess} class,
-value is automatically taken from \verb{$parameters$qc_types}.}
+\item{col_qc_label}{Character vector or \code{NULL}. Value(s) of \code{col_group}
+identifying the reference group for the LOESS trend line, typically QC
+samples. \code{NULL} draws no trend line. Default: \code{c("QC", "SQC", "EQC")};
+for a \code{run_DIpreprocess} input, its \code{qc_types} are used.}
 
 \item{arrange_group}{Character vector or \code{NULL}. Custom order for the
-sample groups in \code{col_group}. If \code{NULL} (default), groups are
-arranged alphanumerically, with \code{col_qc_label} values placed first.}
+sample groups in \code{col_group}. If \code{NULL} (default), groups are arranged
+alphanumerically, with \code{col_qc_label} values placed first.}
 
 \item{plot_title}{Character or \code{NULL}. Main title for the combined plot.
-If \code{NULL} (default), a title is automatically generated based on
-\code{x_label}, \code{y_label}, and the number of batches.}
+If \code{NULL} (default), a title is generated from \code{x_label}, \code{y_label}, and
+the number of batches.}
 
-\item{x_label}{Character. Label for the before-correction facet panel.
-Default is \code{"Before"}.}
+\item{x_label}{Character. Label of the before panel. Default: \code{"Before"}.}
 
-\item{y_label}{Character. Label for the after-correction facet panel.
-Default is \code{"After"}.}
+\item{y_label}{Character. Label of the after panel. Default: \code{"After"}.}
 
-\item{log_transform}{Logical. If \code{TRUE}, applies a \code{log10}
-transformation (with a small floor of \code{1e-10}) to feature values
-before plotting. Default is \code{TRUE}.}
+\item{log_transform}{Logical. If \code{TRUE} (default), plot \code{log10} values
+(floored at \code{1e-10}).}
 
-\item{point_size}{Numeric. Size of individual data points. Default is
-\code{2}.}
+\item{point_size}{Numeric. Point size. Default: \code{1.5}.}
 
-\item{point_alpha}{Numeric in \code{[0, 1]}. Transparency of data points.
-Default is \code{0.7}.}
+\item{point_alpha}{Numeric in (0, 1]. Point transparency. Default: \code{0.7}.}
 
-\item{plot_cols}{Integer or \code{NULL}. Number of columns in the combined
-plot grid. If \code{NULL}, determined automatically. Default is
-\code{NULL}.}
+\item{plot_cols}{Integer or \code{NULL}. Number of columns of the panel grid;
+\code{NULL} (default) chooses it from the number of features.}
 
-\item{theme}{Character. ggplot2 theme to apply to each panel. Options:
-\code{"nature"}, \code{"minimal"}, \code{"classic"}, \code{"bw"},
-\code{"light"}, \code{"dark"}. Default is \code{"nature"} (a clean,
-publication-ready style based on \code{theme_bw()}).}
+\item{theme}{Character. ggplot2 theme for each panel: \code{"nature"}
+(default; a clean style based on \code{theme_bw()}), \code{"minimal"},
+\code{"classic"}, \code{"bw"}, \code{"light"}, or \code{"dark"}.}
 
-\item{base_size}{Numeric. Base font size for the theme (pts). Default is
-\code{15}.}
+\item{base_size}{Numeric. Base font size in points. All text sizes follow
+it unless set explicitly below. Default: \code{11}, ggplot2's default, which
+suits the default 7 x 5 inch figures of R Markdown and Quarto.}
 
-\item{font_family}{Character. Font family for all text elements. Default
-is \code{"sans"}.}
+\item{font_family}{Character. Font family for all text. Default: \code{"sans"}.}
 
-\item{seed}{Numeric or \code{NULL}. Random seed passed to \code{set.seed()}
-before any internal sampling operations. Default is \code{123}.}
+\item{seed}{Numeric or \code{NULL}. Seed for the random feature selection; the
+global random number state is restored afterwards. Default: \code{123}.}
 
-\item{global_font_size}{Numeric or \code{NULL}. Base font size for
-proportional scaling of all text elements. Default is \code{NULL}.}
+\item{title_size}{Numeric. Font size of the feature panel titles.
+Default: \code{base_size}.}
 
-\item{title_size}{Numeric or \code{NULL}. Feature panel title font size.
-Default is \code{NULL}.}
+\item{subtitle_size}{Numeric. Font size of the main title above all
+panels. Default: \code{base_size * 1.2}.}
 
-\item{subtitle_size}{Numeric or \code{NULL}. Main plot title (top grob)
-font size. Default is \code{NULL}.}
-
-\item{xlab_size}{Numeric or \code{NULL}. X-axis label font size. Default
-is \code{NULL}.}
-
-\item{ylab_size}{Numeric or \code{NULL}. Y-axis label font size. Default
-is \code{NULL}.}
+\item{xlab_size, ylab_size}{Numeric. Font sizes of the x- and y-axis titles.
+Default: \code{base_size}.}
 }
 \value{
-Invisibly returns a \code{gtable} grob object (from
-\code{gridExtra::arrangeGrob()}) containing all feature panels. The
-plot is also drawn to the active graphics device.
+The combined plot: a \code{gtable} (from \code{\link[gridExtra:arrangeGrob]{gridExtra::arrangeGrob()}})
+with class \code{"dimsprepr_plot"}, drawn when printed; \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}
+can save it.
 }
 \description{
 Generates a multi-panel plot comparing the signal of selected features
@@ -147,42 +125,33 @@ sample group and shaped by batch, with an optional LOESS trend line fitted
 to a user-defined reference group (e.g., QC samples).
 }
 \details{
-\code{x} and \code{y} must share identical row counts, column counts, and
-column names. Row order is assumed to correspond between \code{x},
-\code{y}, and \code{metadata}.
+\code{x} and \code{y} must share identical row counts, column counts, and column
+names. Row order is assumed to correspond between \code{x}, \code{y}, and
+\code{metadata}. Missing values are left out of the panels.
 
-When \code{log_transform = TRUE}, values are floored at \code{1e-10}
-before log transformation to avoid \code{-Inf} results from zero or
-negative values.
+The LOESS trend line (Cleveland, 1979) is fitted only to the group given in
+\code{col_qc_label}; with fewer than 3 observations of that group a warning is
+issued and the line is suppressed. Groups are coloured with the
+colour-blind-safe Okabe-Ito palette (Okabe & Ito, 2008).
 
-Font sizes are resolved with the following priority (highest to lowest):
-explicit size argument (e.g., \code{title_size}) > \code{global_font_size}
-scaling > \code{base_size}-derived default. When \code{global_font_size}
-is provided and a specific size is not, text elements scale proportionally
-relative to a base size of 11.
-
-The LOESS trend line is fitted only to the group identified by
-\code{col_qc_label}. If fewer than 3 observations of that group are
-present, a warning is issued and the line is suppressed for that feature.
-
-The combined plot is rendered via \code{gridExtra::arrangeGrob()} and
-displayed with \code{grid::grid.draw()}. The returned object is an
-invisible \code{gtable} grob that can be redrawn or exported with
-\code{ggplot2::ggsave()}.
+Like a ggplot, the plot is drawn when it is printed, which happens
+automatically when the call is not assigned, so it appears directly in the
+console and in R Markdown and Quarto documents. Inside loops or functions,
+call \code{print()} on it.
 }
 \examples{
 data(dims_data)
 data(dims_metadata)
 raw <- replace(dims_data, dims_data == 0, NA)  # zeros = not detected
-before <- run_mvimpute(raw[, 1:6], verbose = FALSE)$data
-after  <- run_normalize(before, dims_metadata, method = "pqn_group",
-                        verbose = FALSE)$data
+before <- raw[, 1:6]
+after  <- run_driftBatchCorrect(before, dims_metadata,
+                                spline_smooth_param = 0.5, verbose = FALSE)$data
 
 plot_beforeafter(before, after, dims_metadata, plot_what = "mz_0001",
-                 x_label = "Raw", y_label = "PQN-normalized")
+                 x_label = "Raw", y_label = "QCRSC-corrected")
 
 # A run_DIpreprocess() result can be passed directly as `x`; it then shows
-# imputed vs drift-corrected data (see the package vignette).
+# the data before and after drift correction (see the package vignette).
 
 }
 \references{
